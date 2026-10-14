@@ -207,7 +207,7 @@ function atk_effective_road_names_only() {
 /* -------------------------------------------------------------------- */
 
 function atk_instructor_roads_redirect_back() {
-	$args = array( 'tab' => 'roads' );
+	$args = array( 'tab' => 'study-tools', 'tool' => 'roads' );
 	if ( ! empty( $_POST['roads_search'] ) ) {
 		$args['roads_search'] = sanitize_text_field( wp_unslash( $_POST['roads_search'] ) );
 	}
@@ -411,7 +411,7 @@ function atk_render_instructor_roads_pagination( $current_page, $total_pages, $s
 	}
 
 	$url_for = function ( $page ) use ( $search ) {
-		$args = array( 'tab' => 'roads', 'roads_page' => $page );
+		$args = array( 'tab' => 'study-tools', 'tool' => 'roads', 'roads_page' => $page );
 		if ( '' !== $search ) {
 			$args['roads_search'] = $search;
 		}
@@ -477,7 +477,8 @@ function atk_render_instructor_roads_tab() {
 	?>
 	<div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-6">
 		<form method="get" action="<?php echo esc_url( atk_get_page_url( 'instructor-dashboard' ) ); ?>" class="d-flex gap-2">
-			<input type="hidden" name="tab" value="roads" />
+			<input type="hidden" name="tab" value="study-tools" />
+			<input type="hidden" name="tool" value="roads" />
 			<input type="text" name="roads_search" class="form-control form-control-sm" placeholder="Search roads&hellip;" value="<?php echo esc_attr( $search ); ?>" style="width: 240px;" />
 			<button type="submit" class="btn btn-sm btn-light-primary">Search</button>
 		</form>

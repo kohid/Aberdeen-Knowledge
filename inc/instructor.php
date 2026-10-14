@@ -544,7 +544,11 @@ function atk_render_instructor_dashboard() {
 	atk_require_instructor();
 
 	$tab = isset( $_GET['tab'] ) ? sanitize_key( $_GET['tab'] ) : 'results';
-	if ( ! in_array( $tab, array( 'results', 'course', 'questions', 'roads', 'neighbourhoods', 'demo' ), true ) ) {
+	if ( 'roads' === $tab ) {
+		// Major Streets moved inside Study Tools; old bookmarks still land there.
+		$tab = 'study-tools';
+	}
+	if ( ! in_array( $tab, array( 'results', 'course', 'questions', 'study-tools', 'neighbourhoods', 'demo' ), true ) ) {
 		$tab = 'results';
 	}
 	?>
@@ -564,7 +568,7 @@ function atk_render_instructor_dashboard() {
 				<a class="nav-link<?php echo 'questions' === $tab ? ' active' : ''; ?>" href="<?php echo esc_url( add_query_arg( 'tab', 'questions', atk_get_page_url( 'instructor-dashboard' ) ) ); ?>">Question Bank</a>
 			</li>
 			<li class="nav-item">
-				<a class="nav-link<?php echo 'roads' === $tab ? ' active' : ''; ?>" href="<?php echo esc_url( add_query_arg( 'tab', 'roads', atk_get_page_url( 'instructor-dashboard' ) ) ); ?>">Major Streets</a>
+				<a class="nav-link<?php echo 'study-tools' === $tab ? ' active' : ''; ?>" href="<?php echo esc_url( add_query_arg( 'tab', 'study-tools', atk_get_page_url( 'instructor-dashboard' ) ) ); ?>">Study Tools</a>
 			</li>
 			<li class="nav-item">
 				<a class="nav-link<?php echo 'neighbourhoods' === $tab ? ' active' : ''; ?>" href="<?php echo esc_url( add_query_arg( 'tab', 'neighbourhoods', atk_get_page_url( 'instructor-dashboard' ) ) ); ?>">Neighbourhoods</a>
@@ -579,8 +583,8 @@ function atk_render_instructor_dashboard() {
 			atk_render_instructor_results_tab();
 		} elseif ( 'course' === $tab ) {
 			atk_render_instructor_course_tab();
-		} elseif ( 'roads' === $tab ) {
-			atk_render_instructor_roads_tab();
+		} elseif ( 'study-tools' === $tab ) {
+			atk_render_instructor_study_tools_tab();
 		} elseif ( 'neighbourhoods' === $tab ) {
 			atk_render_instructor_neighbourhoods_tab();
 		} elseif ( 'demo' === $tab ) {
@@ -602,6 +606,36 @@ add_shortcode( 'atk_instructor_dashboard', function () {
 	atk_render_instructor_dashboard();
 	return ob_get_clean();
 } );
+
+/**
+ * Study Tools tab: the instructor-managed content behind the map tools. A line-tab
+ * bar switches between Major Streets and Places of Interest (?tool=roads|poi).
+ */
+function atk_render_instructor_study_tools_tab() {
+	$tools = array( 'roads' => 'Major Streets', 'poi' => 'Places of Interest' );
+	$tool  = isset( $_GET['tool'] ) ? sanitize_key( $_GET['tool'] ) : 'roads';
+	if ( ! isset( $tools[ $tool ] ) ) {
+		$tool = 'roads';
+	}
+	?>
+	<ul class="nav nav-tabs nav-line-tabs fs-7 mb-6">
+		<?php foreach ( $tools as $key => $label ) : ?>
+			<li class="nav-item">
+				<a class="nav-link<?php echo $key === $tool ? ' active' : ''; ?>" href="<?php echo esc_url( add_query_arg( array( 'tab' => 'study-tools', 'tool' => $key ), atk_get_page_url( 'instructor-dashboard' ) ) ); ?>"><?php echo esc_html( $label ); ?></a>
+			</li>
+		<?php endforeach; ?>
+	</ul>
+	<?php
+	if ( 'poi' === $tool ) {
+		if ( function_exists( 'atk_render_instructor_poi_places_tab' ) ) {
+			atk_render_instructor_poi_places_tab();
+		} else {
+			echo '<div class="card"><div class="card-body text-gray-600">Places of Interest is coming soon.</div></div>';
+		}
+		return;
+	}
+	atk_render_instructor_roads_tab();
+}
 
 const ATK_RESULTS_PER_PAGE = 10;
 

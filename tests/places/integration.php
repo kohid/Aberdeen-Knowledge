@@ -204,6 +204,29 @@ $gone = it_rest( 'DELETE', 'poi-places/' . $rid );
 t( 'deleting again is a 404', $gone->get_status(), 404 );
 
 
+/* ---- Task 6: Study Tools tab ---- */
+function it_dashboard( array $get ) {
+	$_GET = $get;
+	$html = do_shortcode( '[atk_instructor_dashboard]' );
+	$_GET = array();
+	return $html;
+}
+$old = it_dashboard( array( 'tab' => 'roads' ) );
+t( 'the nav shows Study Tools', strpos( $old, '>Study Tools</a>' ) !== false, true );
+preg_match( '#<ul class="nav nav-tabs nav-line-tabs nav-line-tabs-2x.*?</ul>#s', $old, $top );
+t( 'there is no top-level Major Streets nav link', ! empty( $top ) && strpos( $top[0], 'Major Streets' ) === false, true );
+t( 'the old roads address opens the Major Streets editor', strpos( $old, 'name="roads_search"' ) !== false, true );
+t( 'the old roads address shows the Study Tools sub-tabs', strpos( $old, 'tool=poi' ) !== false && strpos( $old, 'Places of Interest' ) !== false, true );
+t( 'the roads search form stays on Study Tools', strpos( $old, 'name="tab" value="study-tools"' ) !== false && strpos( $old, 'name="tool" value="roads"' ) !== false, true );
+$new = it_dashboard( array( 'tab' => 'study-tools' ) );
+t( 'study-tools defaults to Major Streets', strpos( $new, 'name="roads_search"' ) !== false, true );
+$poi = it_dashboard( array( 'tab' => 'study-tools', 'tool' => 'poi' ) );
+t( 'tool=poi does not show the roads editor', strpos( $poi, 'name="roads_search"' ) === false, true );
+t( 'tool=poi marks Places of Interest active', (bool) preg_match( '/class="nav-link active"[^>]*>Places of Interest</', $poi ), true );
+$junk = it_dashboard( array( 'tab' => 'study-tools', 'tool' => 'nonsense' ) );
+t( 'an unknown tool falls back to Major Streets', strpos( $junk, 'name="roads_search"' ) !== false, true );
+
+
 /* ---- end ---- */
 it_clean();
 wp_delete_user( $user_id );
