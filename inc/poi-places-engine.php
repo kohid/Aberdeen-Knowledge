@@ -358,3 +358,19 @@ class ATK_Poi_Planner {
 		return array_merge( array_keys( $ordered ), array_keys( $rest_ids ) );
 	}
 }
+
+/**
+ * The Aberdeen area a map pin must fall inside. The same box is applied in the
+ * browser (assets/js/poi-geo.js) and again here before a coordinate is stored.
+ */
+class ATK_Poi_Geo {
+
+	const LAT_MIN = 57.00;
+	const LAT_MAX = 57.30;
+	const LNG_MIN = -2.40;
+	const LNG_MAX = -1.95;
+
+	public static function in_box( $lat, $lng ) {
+		return $lat >= self::LAT_MIN && $lat <= self::LAT_MAX && $lng >= self::LNG_MIN && $lng <= self::LNG_MAX;
+	}
+}

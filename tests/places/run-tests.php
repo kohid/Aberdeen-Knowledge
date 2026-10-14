@@ -80,5 +80,10 @@ check( 'leaves a leading St alone', $matcher->match( 'St Machar Drive, AB24 3UU'
 check( 'a bare area name is unmatched', $matcher->match( 'Foresterhill, AB25 2ZW' )['status'], 'unmatched' );
 check( 'unmatched has no road', $matcher->match( 'Foresterhill, AB25 2ZW' )['road'], null );
 
+// Area box.
+check( 'in_box accepts Aberdeen', ATK_Poi_Geo::in_box( 57.1497, -2.0943 ), true );
+check( 'in_box rejects London', ATK_Poi_Geo::in_box( 51.5, -0.12 ), false );
+check( 'in_box rejects the box edge outside', ATK_Poi_Geo::in_box( 57.31, -2.0 ), false );
+
 echo "\n$checks checks, $failures failed\n";
 exit( $failures ? 1 : 0 );
