@@ -30,17 +30,19 @@
       "name": "Old Blackfriars",
       "postcode": "AB11 5BB",
       "street": "Castle Street",
-      "also": ["Castlegate"],
+      "also": [],
+      "only": true,
       "source": "https://camra.org.uk/pubs/old-blackfriars-aberdeen-112821",
-      "note": "The pub's listed address is 52 Castle Street, AB11 5BB. The sheet says Castlegate, so both are accepted."
+      "note": "The pub's listed address is 52 Castle Street, AB11 5BB. Jay chose Castle Street as the single accepted answer, so the sheet's Castlegate is not accepted."
     },
     {
       "name": "Linx Ice Arena",
       "postcode": "AB24 5NR",
       "street": "Beach Esplanade",
-      "also": ["Loverose Way"],
+      "also": [],
+      "only": true,
       "source": "https://www.sportaberdeen.co.uk/venues/linx-ice-arena",
-      "note": "The operator lists Beach Esplanade, AB24 5NR. The sheet says Loverose Way, so both are accepted."
+      "note": "The operator lists Beach Esplanade, AB24 5NR. Jay chose Beach Esplanade as the single accepted answer, so the sheet's Loverose Way is not accepted."
     },
     {
       "name": "Marriott Hotel",

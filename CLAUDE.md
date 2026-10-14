@@ -207,7 +207,8 @@ empty and the instructor imports the official sheet.
   preview and the fill share one plan (`ATK_Poi_Planner::course_plan`, `ATK_Poi_Store::course_preview` / `course_apply`).
 - **Researched answers**: `assets/data/poi-research.json` holds streets checked against a real source (name, postcode,
   street, extra accepted spellings, source link, note). The researched street is asked first and the sheet's street is
-  also accepted. Places with no street answer and no research (Seaview Caravan Park) are left out, never guessed.
+  also accepted, unless the entry has `only: true`, which makes the researched street the single answer (Jay's ruling for
+  Old Blackfriars: Castle Street, and Linx Ice Arena: Beach Esplanade). Places with no street answer and no research (Seaview Caravan Park) are left out, never guessed.
 - **Public**: `GET atk/v1/poi-venues` (cached one minute, `Cache-Control: public, max-age=60`) returns the pinned places; the map
   page reads only that route. The POI test and the Course Builder POI picker read the saved places that are current and have
   a street answer.

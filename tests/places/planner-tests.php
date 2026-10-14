@@ -139,6 +139,10 @@ check( 'the plan has 13 weeks', count( $plan['weeks'] ), 13 );
 check( 'week numbers run 1 to 13', array_column( $plan['weeks'], 'number' ), range( 1, 13 ) );
 check( 'week 8 is George Street/Harbour', $plan['weeks'][7]['ward'], 'George Street/Harbour' );
 check( 'researched street comes first, saved and extra after', $plan['weeks'][7]['questions'][0]['accepted'], array( 'Castle Street', 'Castlegate' ) );
+$only_plan = ATK_Poi_Planner::course_plan( $places, array(
+	ATK_Poi_Planner::research_key( 'Old Blackfriars', 'AB11 5BB' ) => array( 'street' => 'Castle Street', 'only' => true, 'also' => array() ),
+) );
+check( 'an only-research street is the single accepted answer', $only_plan['weeks'][7]['questions'][0]['accepted'], array( 'Castle Street' ) );
 check( 'a ward spelled with spaces still lands in its week', $plan['weeks'][6]['questions'][0]['poi'], '22 CLUB' );
 check( 'an unresearched answer is just the saved street', $plan['weeks'][6]['questions'][0]['accepted'], array( 'ROSE STREET' ) );
 check( 'a place with no street answer is left out and named', $plan['weeks'][1]['no_answer'], array( 'Seaview Caravan Park' ) );

@@ -426,7 +426,8 @@ t( 'each of the five tests holds both places', array_count_values( array_map( fu
 t( 'the closed place and the one with no street are not asked', count( array_unique( array_column( $qs, 'poi' ) ) ), 2 );
 t( 'accepted answers are saved as JSON', json_decode( $qs[0]->accepted, true ), array( 'ALPHA ROAD' ) );
 $bf = $wpdb->get_row( "SELECT q.accepted FROM " . atk_table( 'course_poi_questions' ) . " q WHERE q.poi = 'Old Blackfriars' LIMIT 1" );
-t( 'the researched street is asked first and the saved one is also accepted', $bf ? json_decode( $bf->accepted, true ) : null, array( 'Castle Street', 'Castlegate' ) );
+t( 'Old Blackfriars accepts Castle Street only, not the sheet street', $bf ? json_decode( $bf->accepted, true ) : null, array( 'Castle Street' ) );
+t( 'Linx Ice Arena research is exclusive too', ATK_Poi_Store::course_research()[ ATK_Poi_Planner::research_key( 'Linx Ice Arena', 'AB24 5NR' ) ]['only'], true );
 t( 'the result counts the weeks created', $res['weeks_created'] >= 2, true );
 
 $count_q = function () use ( $wpdb ) { return (int) $wpdb->get_var( 'SELECT COUNT(*) FROM ' . atk_table( 'course_poi_questions' ) ); };

@@ -409,6 +409,7 @@ class ATK_Poi_Store {
 			$out[ ATK_Poi_Planner::research_key( $row['name'], isset( $row['postcode'] ) ? $row['postcode'] : '' ) ] = array(
 				'street' => (string) $row['street'],
 				'also'   => isset( $row['also'] ) ? (array) $row['also'] : array(),
+				'only'   => ! empty( $row['only'] ),
 				'source' => isset( $row['source'] ) ? (string) $row['source'] : '',
 				'note'   => isset( $row['note'] ) ? (string) $row['note'] : '',
 			);
