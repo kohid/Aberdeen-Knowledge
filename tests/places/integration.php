@@ -353,6 +353,37 @@ t( 'the intro never promises more questions than the bank holds', strpos( $some_
 t( 'the Question Bank POI tab links to Study Tools', strpos( $bank, 'tool=poi' ) !== false, true );
 t( 'the old typed question list and bulk editor are gone from the page', strpos( $bank, 'atk-poi-bulk-form' ) === false && strpos( $bank, 'atk-poi-modal' ) === false, true );
 
+/* ---- review fixes ---- */
+it_clean();
+$wards_before = (int) $wpdb->get_var( 'SELECT COUNT(*) FROM ' . atk_table( 'nb_neighbourhoods' ) );
+ATK_Poi_Store::commit( array(
+	it_row( 2, 'ZZ-IT Spell One', '', 'AB10 1AA', 'ZZ-IT Mid / Ros' ),
+	it_row( 3, 'ZZ-IT Spell Two', '', 'AB10 1AB', 'ZZ-IT Mid/Ros' ),
+), array( 2 ), array() );
+t( 'two spellings of one new ward make one neighbourhood', (int) $wpdb->get_var( 'SELECT COUNT(*) FROM ' . atk_table( 'nb_neighbourhoods' ) . " WHERE name LIKE 'ZZ-IT Mid%'" ), 1 );
+$spell = array_values( array_filter( ATK_Poi_Store::all(), function ( $p ) { return strpos( $p['name'], 'ZZ-IT Spell' ) === 0; } ) );
+t( 'both places sit in that one ward', count( array_unique( array_column( $spell, 'ward_id' ) ) ) === 1 && $spell[0]['ward_id'] > 0, true );
+
+$purged = array();
+add_action( 'litespeed_purge_url', function ( $url ) use ( &$purged ) { $purged[] = $url; } );
+ATK_Poi_Store::flush_cache();
+t( 'a write purges the public venues address from the server cache', in_array( rest_url( 'atk/v1/poi-venues' ), $purged, true ), true );
+wp_set_current_user( 0 );
+$lh = it_rest( 'GET', 'poi-venues' )->get_headers();
+t( 'the venues route tells LiteSpeed to keep it for one minute', isset( $lh['X-LiteSpeed-Cache-Control'] ) ? $lh['X-LiteSpeed-Cache-Control'] : '', 'public,max-age=60' );
+wp_set_current_user( $user_id );
+
+ATK_Poi_Store::save( array( 'name' => 'ZZ-IT Dup', 'postcode' => 'AB10 1AA', 'street_answer' => 'AAA ROAD', 'status' => 'current' ) );
+ATK_Poi_Store::save( array( 'name' => 'ZZ-IT Dup', 'postcode' => 'AB11 2BB', 'street_answer' => 'BBB ROAD', 'status' => 'current' ) );
+$dq = array();
+foreach ( atk_poi_test_questions() as $q ) {
+	if ( strpos( $q['poi'], 'ZZ-IT Dup' ) === 0 ) {
+		$dq[ $q['poi'] ] = $q['accepted'][0];
+	}
+}
+t( 'places that share a name become two distinct test questions', $dq, array( 'ZZ-IT Dup (AB10 1AA)' => 'AAA ROAD', 'ZZ-IT Dup (AB11 2BB)' => 'BBB ROAD' ) );
+t( 'the Course Builder picker lists both places apart', array_values( array_intersect( atk_instructor_known_poi_names(), array( 'ZZ-IT Dup (AB10 1AA)', 'ZZ-IT Dup (AB11 2BB)', 'ZZ-IT Dup' ) ) ), array( 'ZZ-IT Dup (AB10 1AA)', 'ZZ-IT Dup (AB11 2BB)' ) );
+
 
 /* ---- end ---- */
 it_clean();

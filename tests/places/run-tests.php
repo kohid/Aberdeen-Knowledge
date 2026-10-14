@@ -85,5 +85,22 @@ check( 'in_box accepts Aberdeen', ATK_Poi_Geo::in_box( 57.1497, -2.0943 ), true 
 check( 'in_box rejects London', ATK_Poi_Geo::in_box( 51.5, -0.12 ), false );
 check( 'in_box rejects the box edge outside', ATK_Poi_Geo::in_box( 57.31, -2.0 ), false );
 
+// Road list holding the same street under two spellings (the master list and a course question can differ in case or punctuation).
+$twins = new ATK_Poi_Street_Matcher( array( 'KING STREET', 'King Street', "KING ROBERT'S WAY", 'King Roberts Way', 'ST NICHOLAS STREET', 'St. Nicholas Street' ) );
+check( 'a street listed twice still matches', $twins->match( '33 King Street, AB24 5AA' )['status'], 'matched' );
+check( 'the first spelling in the list is the answer', $twins->match( '33 King Street, AB24 5AA' )['road'], 'KING STREET' );
+check( 'a punctuation twin still matches', $twins->match( 'St Nicholas Centre, St Nicholas Street, AB10 1BU' )['road'], 'ST NICHOLAS STREET' );
+
+// Display names: a name used by more than one place gets its postcode.
+check( 'repeated names get their postcode', ATK_Poi_Planner::display_names( array(
+	array( 'name' => 'Premier Inn', 'postcode' => 'AB10 1AA' ),
+	array( 'name' => 'premier inn', 'postcode' => 'AB11 2BB' ),
+	array( 'name' => 'Marischal College', 'postcode' => 'AB10 1AB' ),
+) ), array( 'Premier Inn (AB10 1AA)', 'premier inn (AB11 2BB)', 'Marischal College' ) );
+check( 'a repeated name with no postcode stays as it is', ATK_Poi_Planner::display_names( array(
+	array( 'name' => 'Tesco', 'postcode' => '' ),
+	array( 'name' => 'Tesco', 'postcode' => 'AB10 1AA' ),
+) ), array( 'Tesco', 'Tesco (AB10 1AA)' ) );
+
 echo "\n$checks checks, $failures failed\n";
 exit( $failures ? 1 : 0 );

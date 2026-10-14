@@ -156,8 +156,8 @@ function atk_instructor_known_road_names() {
  */
 function atk_instructor_known_poi_names() {
 	$names = array();
-	foreach ( ATK_Poi_Store::all() as $place ) {
-		$names[ $place['name'] ] = true;
+	foreach ( ATK_Poi_Store::labelled() as $place ) {
+		$names[ $place['label'] ] = true;
 	}
 	$list = array_keys( $names );
 	sort( $list, SORT_STRING | SORT_FLAG_CASE );
@@ -829,8 +829,8 @@ function atk_render_instructor_course_tab() {
 	$price = atk_course_get_price( $type );
 	if ( 'poi' === $type ) {
 		$all_places = array_map( function ( $p ) {
-			return array( 'name' => $p['name'], 'street' => $p['street_answer'] );
-		}, ATK_Poi_Store::all() );
+			return array( 'name' => $p['label'], 'street' => $p['street_answer'] );
+		}, ATK_Poi_Store::labelled() );
 		atk_nb_enqueue_course_builder( array(), ATK_Poi_Store::week_places( $weeks ), $all_places );
 	} else {
 		atk_nb_enqueue_course_builder( 'street' === $type ? atk_nb_week_street_map( $weeks ) : array() );

@@ -48,6 +48,16 @@ class ATK_Poi_Store {
 		return array_map( array( __CLASS__, 'to_place' ), (array) $rows );
 	}
 
+	/** @return array[] Every place, each with a `label`: its name, plus the postcode when another place shares the name. */
+	public static function labelled() {
+		$places = self::all();
+		$labels = ATK_Poi_Planner::display_names( $places );
+		foreach ( $places as $i => $place ) {
+			$places[ $i ]['label'] = $labels[ $i ];
+		}
+		return $places;
+	}
+
 	public static function get( $id ) {
 		global $wpdb;
 		$row = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . self::table() . ' WHERE id = %d', (int) $id ) );
@@ -248,6 +258,7 @@ class ATK_Poi_Store {
 		$asked  = array_map( 'intval', $create_wards );
 		// Ticking one line of a new ward creates that ward for every line that names it.
 		$approved = array();
+		$made_for = array(); // ward key => id, so "A / B" and "A/B" share one new ward.
 		foreach ( $plan as $row ) {
 			if ( null === $row['ward_id'] && in_array( $row['line'], $asked, true ) ) {
 				$approved[ ATK_Poi_Parser::ward_key( $row['ward'] ) ] = true;
@@ -261,10 +272,14 @@ class ATK_Poi_Store {
 			$ward_id = $row['ward_id'];
 			if ( null === $ward_id ) {
 				$ward_id = 0;
-				if ( isset( $approved[ ATK_Poi_Parser::ward_key( $row['ward'] ) ] ) ) {
+				$ward_key = ATK_Poi_Parser::ward_key( $row['ward'] );
+				if ( isset( $made_for[ $ward_key ] ) ) {
+					$ward_id = $made_for[ $ward_key ];
+				} elseif ( isset( $approved[ $ward_key ] ) ) {
 					$made = ATK_Nb_Store::ensure_neighbourhood( $row['ward'], $cache );
 					if ( ! is_wp_error( $made ) ) {
 						$ward_id = (int) $made[0];
+						$made_for[ $ward_key ] = $ward_id;
 						if ( $made[1] ) {
 							$result['wards_created']++;
 						}
@@ -329,16 +344,14 @@ class ATK_Poi_Store {
 			return $cached;
 		}
 		$rows   = $wpdb->get_results( 'SELECT * FROM ' . self::table() . ' WHERE lat IS NOT NULL AND lng IS NOT NULL ORDER BY sort_order ASC, id ASC' );
-		$counts = array();
-		foreach ( (array) $rows as $row ) {
-			$key            = mb_strtolower( $row->name, 'UTF-8' );
-			$counts[ $key ] = isset( $counts[ $key ] ) ? $counts[ $key ] + 1 : 1;
-		}
+		$rows   = (array) $rows;
+		$names  = ATK_Poi_Planner::display_names( array_map( function ( $row ) {
+			return array( 'name' => $row->name, 'postcode' => (string) $row->postcode );
+		}, $rows ) );
 		$venues = array();
-		foreach ( (array) $rows as $row ) {
-			$repeat   = $counts[ mb_strtolower( $row->name, 'UTF-8' ) ] > 1;
+		foreach ( $rows as $i => $row ) {
 			$venues[] = array(
-				'name'     => $row->name . ( $repeat && '' !== $row->postcode ? ' (' . $row->postcode . ')' : '' ),
+				'name'     => $names[ $i ],
 				'category' => $row->category,
 				'status'   => $row->status,
 				'address'  => (string) $row->address,
@@ -359,8 +372,8 @@ class ATK_Poi_Store {
 	 */
 	public static function week_places( array $weeks ) {
 		$by_ward = array();
-		foreach ( self::all() as $place ) {
-			$by_ward[ $place['ward_id'] ][] = array( 'name' => $place['name'], 'street' => $place['street_answer'] );
+		foreach ( self::labelled() as $place ) {
+			$by_ward[ $place['ward_id'] ][] = array( 'name' => $place['label'], 'street' => $place['street_answer'] );
 		}
 		$out = array();
 		foreach ( $weeks as $week ) {
@@ -379,6 +392,9 @@ class ATK_Poi_Store {
 
 	public static function flush_cache() {
 		delete_transient( self::CACHE_KEY );
+		// LiteSpeed Cache keeps REST answers on its own clock (7 days by default).
+		// Does nothing on a site without it.
+		do_action( 'litespeed_purge_url', rest_url( 'atk/v1/poi-venues' ) );
 	}
 }
 
@@ -512,6 +528,8 @@ function atk_poi_rest_commit( WP_REST_Request $request ) {
 function atk_poi_rest_venues() {
 	$response = rest_ensure_response( array( 'venues' => ATK_Poi_Store::venues() ) );
 	$response->header( 'Cache-Control', 'public, max-age=60' );
+	// LiteSpeed Cache reads this instead of its 7-day REST default.
+	$response->header( 'X-LiteSpeed-Cache-Control', 'public,max-age=60' );
 	return $response;
 }
 

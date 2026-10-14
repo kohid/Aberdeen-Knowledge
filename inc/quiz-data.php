@@ -320,9 +320,9 @@ function atk_street_test_questions() {
  */
 function atk_poi_test_questions() {
 	$questions = array();
-	foreach ( ATK_Poi_Store::all() as $place ) {
+	foreach ( ATK_Poi_Store::labelled() as $place ) {
 		if ( 'current' === $place['status'] && '' !== $place['street_answer'] ) {
-			$questions[] = array( 'poi' => $place['name'], 'accepted' => array( $place['street_answer'] ) );
+			$questions[] = array( 'poi' => $place['label'], 'accepted' => array( $place['street_answer'] ) );
 		}
 	}
 	return $questions;

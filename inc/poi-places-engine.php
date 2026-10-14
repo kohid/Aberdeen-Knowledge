@@ -168,7 +168,19 @@ class ATK_Poi_Street_Matcher {
 
 	/** @param string[] $road_names */
 	public function __construct( array $road_names ) {
-		$this->matcher = new ATK_Nb_Matcher( array_values( $road_names ) );
+		// The same street can be listed twice in different case or punctuation
+		// ("St. Nicholas Street" and "St Nicholas Street"); the matcher would call
+		// that ambiguous and never match it, so keep the first spelling only.
+		$seen = array();
+		$kept = array();
+		foreach ( $road_names as $name ) {
+			$key = ATK_Nb_Parser::normalise_name( $name );
+			if ( '' !== $key && ! isset( $seen[ $key ] ) ) {
+				$seen[ $key ] = true;
+				$kept[]       = $name;
+			}
+		}
+		$this->matcher = new ATK_Nb_Matcher( $kept );
 	}
 
 	/** Expands an abbreviated final word only ("King st" becomes "King Street"; "St Machar Drive" is untouched). */
@@ -205,6 +217,27 @@ class ATK_Poi_Street_Matcher {
  * Pure PHP: the store hands it plain arrays, so every rule here can be tested.
  */
 class ATK_Poi_Planner {
+
+	/**
+	 * The name each place is shown and asked under. A name used by more than one
+	 * place gets its postcode added, so two branches of one chain stay two places.
+	 *
+	 * @param array[] $items Each with `name` and `postcode`.
+	 * @return string[] One display name per item, in the same order.
+	 */
+	public static function display_names( array $items ) {
+		$counts = array();
+		foreach ( $items as $item ) {
+			$key            = mb_strtolower( $item['name'], 'UTF-8' );
+			$counts[ $key ] = isset( $counts[ $key ] ) ? $counts[ $key ] + 1 : 1;
+		}
+		$out = array();
+		foreach ( $items as $item ) {
+			$repeat = $counts[ mb_strtolower( $item['name'], 'UTF-8' ) ] > 1;
+			$out[]  = $item['name'] . ( $repeat && '' !== trim( (string) $item['postcode'] ) ? ' (' . $item['postcode'] . ')' : '' );
+		}
+		return $out;
+	}
 
 	const CATEGORIES = array(
 		'Restaurants and Cafes',
