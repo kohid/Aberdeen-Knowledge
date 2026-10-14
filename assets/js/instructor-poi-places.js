@@ -187,6 +187,34 @@
 				"</div></div>" +
 			"</div>" +
 
+			"<input id=\"atk-poi-file\" class=\"d-none\" type=\"file\" accept=\".xlsx,.xls,.csv\" aria-label=\"Choose a spreadsheet file\">" +
+
+			"<div class=\"modal fade\" id=\"atk-poi-import-modal\" tabindex=\"-1\" aria-labelledby=\"atk-poi-import-title\" aria-hidden=\"true\">" +
+				"<div class=\"modal-dialog modal-dialog-centered modal-lg\"><div class=\"modal-content\">" +
+					"<form id=\"atk-poi-paste-form\">" +
+						"<div class=\"modal-header\"><h3 class=\"modal-title\" id=\"atk-poi-import-title\">Import places of interest</h3>" +
+							"<button type=\"button\" class=\"btn-close\" data-bs-dismiss=\"modal\" aria-label=\"Close\"></button></div>" +
+						"<div class=\"modal-body\">" +
+							"<div id=\"atk-poi-drop\" class=\"akn-poi-drop text-center p-10 mb-6\" tabindex=\"0\" role=\"button\" aria-label=\"Choose a spreadsheet file\">" +
+								"<div class=\"fw-bold fs-5 text-gray-900 mb-1\">Drop a .xlsx or .csv file here</div>" +
+								"<div class=\"text-gray-600 fs-6\">or click to choose one. The first sheet is read, with the columns Place of interest, Street, Postcode and Ward.</div>" +
+							"</div>" +
+							"<label class=\"form-label fw-semibold\" for=\"atk-poi-paste-text\">Or paste rows copied from a spreadsheet</label>" +
+							"<textarea id=\"atk-poi-paste-text\" class=\"form-control form-control-solid\" rows=\"6\" spellcheck=\"false\"></textarea>" +
+							"<div id=\"atk-poi-import-error\" class=\"text-danger fs-6 mt-3\" role=\"alert\"></div>" +
+						"</div>" +
+						"<div class=\"modal-footer\">" +
+							"<button type=\"button\" class=\"btn btn-light\" data-bs-dismiss=\"modal\">Cancel</button>" +
+							"<button type=\"submit\" class=\"btn btn-primary\">Check pasted rows</button>" +
+						"</div>" +
+					"</form>" +
+				"</div></div>" +
+			"</div>" +
+
+			"<div class=\"modal fade\" id=\"atk-poi-review-modal\" tabindex=\"-1\" aria-labelledby=\"atk-poi-review-title\" aria-hidden=\"true\">" +
+				"<div class=\"modal-dialog modal-dialog-centered modal-dialog-scrollable modal-xl\"><div class=\"modal-content\" id=\"atk-poi-review-content\"></div></div>" +
+			"</div>" +
+
 			"<div class=\"modal fade\" id=\"atk-poi-delete-modal\" tabindex=\"-1\" aria-labelledby=\"atk-poi-delete-title\" aria-hidden=\"true\">" +
 				"<div class=\"modal-dialog modal-dialog-centered\"><div class=\"modal-content\">" +
 					"<div class=\"modal-header\"><h3 class=\"modal-title\" id=\"atk-poi-delete-title\">Delete this place?</h3>" +
@@ -404,6 +432,319 @@
 		} );
 	}
 
+	/* ---------- import ---------- */
+
+	var MAX_SHEET_ROWS = 5000;
+	var MAX_REVIEW_ROWS = 500;
+	var imp = { payload: null, plan: null, overrides: {}, skipWard: {}, onlyAttention: false };
+
+	function isOpen( id ) {
+		return document.getElementById( id ).classList.contains( "show" );
+	}
+
+	/* Bootstrap shows one modal at a time, so wait for the first to finish closing. */
+	function swapModal( fromId, toId ) {
+		if ( ! isOpen( fromId ) ) {
+			modal( toId ).show();
+			return;
+		}
+		document.getElementById( fromId ).addEventListener( "hidden.bs.modal", function () { modal( toId ).show(); }, { once: true } );
+		modal( fromId ).hide();
+	}
+
+	function wardKey( name ) {
+		return String( name ).toLowerCase().replace( /\s+/g, " " ).replace( /\s*\/\s*/g, "/" ).trim();
+	}
+
+	function openImport() {
+		$( "#atk-poi-import-error" ).textContent = "";
+		$( "#atk-poi-paste-text" ).value = "";
+		modal( "atk-poi-import-modal" ).show();
+	}
+
+	function importError( message ) {
+		if ( isOpen( "atk-poi-import-modal" ) ) {
+			$( "#atk-poi-import-error" ).textContent = message;
+		} else {
+			flash( message, "error" );
+		}
+	}
+
+	function requestBody() {
+		var body = imp.payload.rows ? { rows: imp.payload.rows } : { text: imp.payload.text };
+		return body;
+	}
+
+	function startReview( payload ) {
+		imp.payload = payload;
+		imp.plan = null;
+		imp.overrides = {};
+		imp.skipWard = {};
+		imp.onlyAttention = false;
+		$( "#atk-poi-import-error" ).textContent = "";
+		api( "poi-places/preview", { method: "POST", body: requestBody() } ).then( function ( plan ) {
+			if ( plan.error ) {
+				throw new Error( plan.error + " Check that the first row holds the column names." );
+			}
+			if ( ! plan.rows.length ) {
+				throw new Error( "No places found in that sheet." );
+			}
+			imp.plan = plan;
+			renderReview();
+			swapModal( "atk-poi-import-modal", "atk-poi-review-modal" );
+		} ).catch( function ( error ) {
+			importError( error.message || "That sheet could not be checked." );
+		} );
+	}
+
+	function readFile( file ) {
+		if ( ! window.XLSX ) {
+			importError( "The spreadsheet reader did not load. Check your connection and try again." );
+			return;
+		}
+		var isCsv = /\.csv$/i.test( file.name );
+		var reading = isCsv ? file.text() : file.arrayBuffer();
+		reading.then( function ( data ) {
+			var book = isCsv ? window.XLSX.read( data, { type: "string" } ) : window.XLSX.read( data, { type: "array" } );
+			var sheet = book.Sheets[ book.SheetNames[ 0 ] ];
+			var rows = window.XLSX.utils.sheet_to_json( sheet, { header: 1, raw: false, defval: "" } );
+			if ( rows.length > MAX_SHEET_ROWS + 1 ) {
+				importError( "That sheet has " + rows.length + " rows. The limit is " + MAX_SHEET_ROWS + " places at a time, so split it into parts and import each one." );
+				return;
+			}
+			startReview( { rows: rows } );
+		} ).catch( function () {
+			importError( "That file could not be read. Save it as .xlsx or .csv and try again." );
+		} );
+	}
+
+	function hasIssue( row, issue ) {
+		return row.issues.indexOf( issue ) !== -1;
+	}
+
+	function needsAttention( row ) {
+		return row.action !== "skip" && ( hasIssue( row, "needs_street" ) || hasIssue( row, "new_ward" ) );
+	}
+
+	function resultBadges( row ) {
+		if ( row.action === "skip" ) {
+			return badge( "Skipped", "secondary" ) + "<div class=\"fs-7 text-gray-600 mt-1\">Same name and postcode as an earlier row</div>";
+		}
+		var out = row.action === "update" ? badge( "Will update", "info" ) : badge( "Ready", "primary" );
+		if ( hasIssue( row, "needs_street" ) ) {
+			out += " " + badge( "Needs a street", "warning" );
+		}
+		if ( hasIssue( row, "new_ward" ) ) {
+			out += " " + badge( "New ward", "success" );
+		}
+		return out;
+	}
+
+	function wardCell( row ) {
+		if ( row.action === "skip" ) {
+			return "";
+		}
+		if ( ! row.ward ) {
+			return "<span class=\"text-gray-600\">No ward given</span>";
+		}
+		if ( ! hasIssue( row, "new_ward" ) ) {
+			return "<span class=\"text-gray-800\">" + esc( row.ward ) + "</span>";
+		}
+		var key = wardKey( row.ward );
+		var on = ! imp.skipWard[ key ];
+		return "<div class=\"text-gray-800\">" + esc( row.ward ) + "</div>" +
+			"<div class=\"form-check form-check-custom form-check-solid mt-2\">" +
+				"<input class=\"form-check-input\" type=\"checkbox\" id=\"atk-poi-ward-" + row.line + "\" data-act=\"create-ward\" data-key=\"" + esc( key ) + "\"" + ( on ? " checked" : "" ) + ">" +
+				"<label class=\"form-check-label fs-7\" for=\"atk-poi-ward-" + row.line + "\">Create this ward</label>" +
+			"</div>";
+	}
+
+	function streetCell( row ) {
+		if ( row.action === "skip" ) {
+			return "";
+		}
+		if ( ! hasIssue( row, "needs_street" ) ) {
+			return "<span class=\"text-gray-800\">" + esc( row.street_answer ) + "</span>";
+		}
+		var typed = imp.overrides[ row.line ] || "";
+		var use = row.suggestion ?
+			"<button type=\"button\" class=\"btn btn-sm btn-light-primary mt-2\" data-act=\"use-suggestion\" data-line=\"" + row.line + "\" data-street=\"" + esc( row.suggestion ) + "\">Use " + esc( row.suggestion ) + "</button>" :
+			"<div class=\"fs-7 text-gray-600 mt-1\">No street on the site looks similar. Type one, or leave it empty and add it later.</div>";
+		return "<input class=\"form-control form-control-sm form-control-solid\" type=\"text\" maxlength=\"255\" data-act=\"street-input\" data-line=\"" + row.line + "\" id=\"atk-poi-street-" + row.line + "\" value=\"" + esc( typed ) + "\" placeholder=\"Street answer\" aria-label=\"Street answer for " + esc( row.name ) + "\">" + use;
+	}
+
+	function renderReview() {
+		var plan = imp.plan;
+		var c = plan.counts;
+		var rows = plan.rows.filter( function ( r ) { return ! imp.onlyAttention || needsAttention( r ); } );
+		var clipped = rows.length > MAX_REVIEW_ROWS;
+		var shown = clipped ? rows.slice( 0, MAX_REVIEW_ROWS ) : rows;
+		var saving = c.add + c.update;
+
+		var body = shown.map( function ( r ) {
+			return "<tr>" +
+				"<td><div class=\"fw-bold text-gray-900\">" + esc( r.name ) + "</div>" +
+					"<div class=\"fs-7 text-gray-600\">Row " + r.line + ( r.postcode ? ", " + esc( r.postcode ) : "" ) + "</div>" +
+					( r.address ? "<div class=\"fs-7 text-gray-600\">" + esc( r.address ) + "</div>" : "" ) + "</td>" +
+				"<td>" + resultBadges( r ) + "</td>" +
+				"<td>" + wardCell( r ) + "</td>" +
+				"<td>" + streetCell( r ) + "</td>" +
+			"</tr>";
+		} ).join( "" );
+
+		var clipNote = clipped ? "<p class=\"fs-7 text-gray-600 mt-3 mb-0\">Showing the first " + MAX_REVIEW_ROWS + " of " + rows.length + " rows. Use the filter to see only the rows that need attention. Every row is saved, not just the ones shown.</p>" : "";
+
+		$( "#atk-poi-review-content" ).innerHTML =
+			"<div class=\"modal-header\"><h3 class=\"modal-title\" id=\"atk-poi-review-title\">Review before saving</h3>" +
+				"<button type=\"button\" class=\"btn-close\" data-bs-dismiss=\"modal\" aria-label=\"Close\"></button></div>" +
+			"<div class=\"modal-body\">" +
+				"<div class=\"d-flex flex-wrap gap-2 mb-5\">" +
+					badge( plural( c.add, "new place", "new places" ), "primary" ) +
+					badge( c.update + " to update", "info" ) +
+					badge( c.skip + " skipped", "secondary" ) +
+					badge( c.needs_street + " need a street", c.needs_street ? "warning" : "secondary" ) +
+					badge( plural( c.new_ward, "row with a new ward", "rows with a new ward" ), c.new_ward ? "success" : "secondary" ) +
+				"</div>" +
+				"<p class=\"fs-6 text-gray-700 mb-5\">Places are saved without a map pin. Pins are looked up from OpenStreetMap right after saving. A place with no street answer is kept but is not used in the POI tests until you add one.</p>" +
+				"<div class=\"form-check form-check-custom form-check-solid mb-5\">" +
+					"<input class=\"form-check-input\" type=\"checkbox\" id=\"atk-poi-only-attention\" data-act=\"only-attention\"" + ( imp.onlyAttention ? " checked" : "" ) + ">" +
+					"<label class=\"form-check-label\" for=\"atk-poi-only-attention\">Show only rows that need attention</label>" +
+				"</div>" +
+				"<div class=\"table-responsive position-relative\"><table class=\"table akn-poi-review align-middle table-row-dashed fs-6 gy-3 mb-0\">" +
+					"<thead><tr class=\"text-start text-gray-600 fw-bold fs-7 gs-0\"><th>Place</th><th>Result</th><th>Ward</th><th>Street answer</th></tr></thead>" +
+					"<tbody>" + body + "</tbody></table></div>" +
+				clipNote +
+			"</div>" +
+			"<div class=\"modal-footer\">" +
+				"<button type=\"button\" class=\"btn btn-light\" data-bs-dismiss=\"modal\">Cancel</button>" +
+				"<button type=\"button\" class=\"btn btn-primary\" data-act=\"commit\"" + ( saving ? "" : " disabled" ) + ">Save " + esc( plural( saving, "place", "places" ) ) + "</button>" +
+			"</div>";
+	}
+
+	function commitImport() {
+		var button = document.querySelector( "#atk-poi-review-content [data-act=\"commit\"]" );
+		button.disabled = true;
+		button.textContent = "Saving";
+		var body = requestBody();
+		body.create_wards = imp.plan.rows.filter( function ( r ) {
+			return hasIssue( r, "new_ward" ) && ! imp.skipWard[ wardKey( r.ward ) ];
+		} ).map( function ( r ) { return r.line; } );
+		body.street_overrides = {};
+		Object.keys( imp.overrides ).forEach( function ( line ) {
+			if ( imp.overrides[ line ].trim() ) {
+				body.street_overrides[ line ] = imp.overrides[ line ].trim();
+			}
+		} );
+		api( "poi-places/commit", { method: "POST", body: body } ).then( function ( result ) {
+			modal( "atk-poi-review-modal" ).hide();
+			var parts = [ "Added " + plural( result.added, "place", "places" ) + ", updated " + result.updated + ", skipped " + result.skipped + "." ];
+			if ( result.wards_created ) {
+				parts.push( plural( result.wards_created, "new ward was", "new wards were" ) + " created." );
+			}
+			return reload().then( function () {
+				flash( parts.join( " " ), "ok" );
+				var ui = window.ATK_POI_ADMIN_UI;
+				if ( ui && typeof ui.afterCommit === "function" ) {
+					ui.afterCommit( result );
+				}
+			} );
+		} ).catch( function ( error ) {
+			fail( error );
+			renderReview();
+		} );
+	}
+
+	function onImportClick( event ) {
+		var el = event.target.closest( "[data-act]" );
+		if ( ! el || el.tagName === "INPUT" ) {
+			return false;
+		}
+		var act = el.getAttribute( "data-act" );
+		if ( act === "use-suggestion" ) {
+			var line = el.getAttribute( "data-line" );
+			var street = el.getAttribute( "data-street" );
+			imp.overrides[ line ] = street;
+			var input = document.getElementById( "atk-poi-street-" + line );
+			if ( input ) {
+				input.value = street;
+			}
+			return true;
+		}
+		if ( act === "commit" ) {
+			commitImport();
+			return true;
+		}
+		return false;
+	}
+
+	function bindImport() {
+		var drop = $( "#atk-poi-drop" );
+		var file = $( "#atk-poi-file" );
+		drop.addEventListener( "click", function () { file.click(); } );
+		drop.addEventListener( "keydown", function ( event ) {
+			if ( event.key === "Enter" || event.key === " " ) {
+				event.preventDefault();
+				file.click();
+			}
+		} );
+		[ "dragenter", "dragover" ].forEach( function ( name ) {
+			drop.addEventListener( name, function ( event ) {
+				event.preventDefault();
+				drop.classList.add( "akn-poi-drop-active" );
+			} );
+		} );
+		[ "dragleave", "drop" ].forEach( function ( name ) {
+			drop.addEventListener( name, function ( event ) {
+				event.preventDefault();
+				drop.classList.remove( "akn-poi-drop-active" );
+			} );
+		} );
+		drop.addEventListener( "drop", function ( event ) {
+			if ( event.dataTransfer && event.dataTransfer.files.length ) {
+				readFile( event.dataTransfer.files[ 0 ] );
+			}
+		} );
+		file.addEventListener( "change", function () {
+			if ( file.files.length ) {
+				if ( ! isOpen( "atk-poi-import-modal" ) ) {
+					openImport();
+				}
+				readFile( file.files[ 0 ] );
+				file.value = "";
+			}
+		} );
+		$( "#atk-poi-paste-form" ).addEventListener( "submit", function ( event ) {
+			event.preventDefault();
+			var text = $( "#atk-poi-paste-text" ).value;
+			if ( ! text.trim() ) {
+				$( "#atk-poi-import-error" ).textContent = "Paste at least one row first.";
+				return;
+			}
+			if ( text.length > 400000 ) {
+				$( "#atk-poi-import-error" ).textContent = "That is too much text to paste. Import the file instead.";
+				return;
+			}
+			startReview( { text: text } );
+		} );
+		var review = $( "#atk-poi-review-modal" );
+		review.addEventListener( "click", onImportClick );
+		review.addEventListener( "change", function ( event ) {
+			var act = event.target.getAttribute( "data-act" );
+			if ( act === "only-attention" ) {
+				imp.onlyAttention = event.target.checked;
+				renderReview();
+			} else if ( act === "create-ward" ) {
+				imp.skipWard[ event.target.getAttribute( "data-key" ) ] = ! event.target.checked;
+				renderReview();
+			}
+		} );
+		review.addEventListener( "input", function ( event ) {
+			if ( event.target.getAttribute( "data-act" ) === "street-input" ) {
+				imp.overrides[ event.target.getAttribute( "data-line" ) ] = event.target.value;
+			}
+		} );
+	}
+
 	/* ---------- events ---------- */
 
 	function onClick( event ) {
@@ -425,8 +766,8 @@
 			if ( doomed ) {
 				openDelete( doomed );
 			}
-		} else if ( act === "import" && window.ATK_POI_ADMIN_UI && typeof window.ATK_POI_ADMIN_UI.openImport === "function" ) {
-			window.ATK_POI_ADMIN_UI.openImport();
+		} else if ( act === "import" ) {
+			openImport();
 		}
 	}
 
@@ -435,6 +776,7 @@
 		root.addEventListener( "click", onClick );
 		$( "#atk-poi-edit-form" ).addEventListener( "submit", saveEdit );
 		$( "#atk-poi-delete-confirm" ).addEventListener( "click", confirmDelete );
+		bindImport();
 		$( "#atk-poi-search" ).addEventListener( "input", function ( event ) {
 			state.search = event.target.value;
 			renderList();
@@ -452,6 +794,7 @@
 		window.ATK_POI_ADMIN_UI.reload = reload;
 		window.ATK_POI_ADMIN_UI.escapeHtml = esc;
 		window.ATK_POI_ADMIN_UI.openPinPicker = window.ATK_POI_ADMIN_UI.openPinPicker || null;
+		window.ATK_POI_ADMIN_UI.openImport = openImport;
 		window.ATK_POI_ADMIN_UI.flash = flash;
 		window.ATK_POI_ADMIN_UI.fail = fail;
 		window.ATK_POI_ADMIN_UI.api = api;

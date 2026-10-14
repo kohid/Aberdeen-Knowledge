@@ -244,7 +244,16 @@ class ATK_Poi_Store {
 	public static function commit( array $parsed_rows, array $create_wards, array $street_overrides ) {
 		$result = array( 'added' => 0, 'updated' => 0, 'skipped' => 0, 'wards_created' => 0, 'lookups' => array() );
 		$cache  = null;
-		foreach ( self::plan_rows( $parsed_rows ) as $row ) {
+		$plan   = self::plan_rows( $parsed_rows );
+		$asked  = array_map( 'intval', $create_wards );
+		// Ticking one line of a new ward creates that ward for every line that names it.
+		$approved = array();
+		foreach ( $plan as $row ) {
+			if ( null === $row['ward_id'] && in_array( $row['line'], $asked, true ) ) {
+				$approved[ ATK_Poi_Parser::ward_key( $row['ward'] ) ] = true;
+			}
+		}
+		foreach ( $plan as $row ) {
 			if ( 'skip' === $row['action'] ) {
 				$result['skipped']++;
 				continue;
@@ -252,7 +261,7 @@ class ATK_Poi_Store {
 			$ward_id = $row['ward_id'];
 			if ( null === $ward_id ) {
 				$ward_id = 0;
-				if ( in_array( $row['line'], array_map( 'intval', $create_wards ), true ) ) {
+				if ( isset( $approved[ ATK_Poi_Parser::ward_key( $row['ward'] ) ] ) ) {
 					$made = ATK_Nb_Store::ensure_neighbourhood( $row['ward'], $cache );
 					if ( ! is_wp_error( $made ) ) {
 						$ward_id = (int) $made[0];
@@ -528,7 +537,8 @@ function atk_poi_script_config() {
 
 function atk_render_instructor_poi_places_tab() {
 	$path = '/assets/js/instructor-poi-places.js';
-	wp_enqueue_script( 'atk-instructor-poi-places', ATK_PLUGIN_URI . $path, array( 'atk-scripts-bundle' ), filemtime( ATK_PLUGIN_DIR . $path ), true );
+	wp_enqueue_script( 'atk-nb-xlsx' ); // SheetJS, bundled (registered in inc/assets.php).
+	wp_enqueue_script( 'atk-instructor-poi-places', ATK_PLUGIN_URI . $path, array( 'atk-scripts-bundle', 'atk-nb-xlsx' ), filemtime( ATK_PLUGIN_DIR . $path ), true );
 	wp_add_inline_script( 'atk-instructor-poi-places', atk_poi_script_config(), 'before' );
 	?>
 	<div id="atk-poi-admin-root"><p class="text-gray-600">Loading places of interest&hellip;</p></div>

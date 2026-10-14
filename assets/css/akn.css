@@ -1819,3 +1819,15 @@ body.akn-app,body.akn-auth{min-height:100vh}
 	.akn-poi-table td.akn-poi-name{flex:1 0 100%}
 	.akn-poi-table td.akn-poi-actions{margin-left:auto}
 }
+
+/* Places import: the file drop zone. */
+.akn-poi-drop{border:2px dashed var(--bs-border-color);border-radius:.75rem;cursor:pointer;transition:background-color .15s,border-color .15s}
+.akn-poi-drop:hover,.akn-poi-drop:focus-visible,.akn-poi-drop-active{border-color:var(--akn-brand);background-color:var(--akn-brand-soft);outline:0}
+.akn-poi-review td{min-width:9rem}
+.badge-light-secondary{background-color:var(--akn-gray-200);color:var(--akn-gray-700)}
+@media (max-width:767.98px){
+	.akn-poi-review colgroup,.akn-poi-review thead{display:none}
+	.akn-poi-review,.akn-poi-review tbody{display:block}
+	.akn-poi-review tr{display:flex;flex-wrap:wrap;gap:.5rem 1rem;padding:1rem 0;border-bottom:1px dashed var(--bs-border-color)}
+	.akn-poi-review td{display:block;padding:0;border:0;min-width:0;flex:1 0 100%}
+}

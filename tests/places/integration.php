@@ -237,6 +237,32 @@ t( 'the config carries the REST address, a nonce and the categories', strpos( $b
 t( 'the Coming soon placeholder is gone', strpos( $poi_html, 'coming soon' ) === false, true );
 
 
+/* ---- Task 8: import flow as the browser sends it ---- */
+$imp_sheet = array(
+	array( 'Place of interest', 'Street', 'Postcode', 'Ward' ),
+	array( 'ZZ-IT Imp One', '55 Rose street, AB10 9YA', 'AB10 9YA', 'ZZ-IT Import Ward' ),
+	array( 'ZZ-IT Imp Two', 'Foresterhill, AB25 9YB', 'AB25 9YB', 'ZZ-IT Import Ward' ),
+);
+$imp_prev = it_rest( 'POST', 'poi-places/preview', array( 'rows' => $imp_sheet ) )->get_data();
+t( 'import preview flags the new ward twice and one missing street', array( $imp_prev['counts']['new_ward'], $imp_prev['counts']['needs_street'] ), array( 2, 1 ) );
+$imp_done = it_rest( 'POST', 'poi-places/commit', array( 'rows' => $imp_sheet, 'create_wards' => array( 2 ), 'street_overrides' => array( 3 => 'Typed Import Road' ) ) )->get_data();
+t( 'import commit adds both and creates the ward once', array( $imp_done['added'], $imp_done['wards_created'] ), array( 2, 1 ) );
+$imp_two = null;
+$imp_one = null;
+foreach ( ATK_Poi_Store::all() as $p ) {
+	if ( 'ZZ-IT Imp Two' === $p['name'] ) {
+		$imp_two = $p;
+	}
+	if ( 'ZZ-IT Imp One' === $p['name'] ) {
+		$imp_one = $p;
+	}
+}
+t( 'both rows share the created ward', $imp_one && $imp_two && $imp_one['ward_id'] > 0 && $imp_one['ward_id'] === $imp_two['ward_id'], true );
+t( 'the typed street was kept for the row that needed one', $imp_two ? $imp_two['street_answer'] : null, 'Typed Import Road' );
+$imp_again = it_rest( 'POST', 'poi-places/preview', array( 'rows' => $imp_sheet ) )->get_data();
+t( 'a second preview of the same sheet is all updates, no new ward', array( $imp_again['counts']['update'], $imp_again['counts']['new_ward'] ), array( 2, 0 ) );
+
+
 /* ---- end ---- */
 it_clean();
 wp_delete_user( $user_id );
