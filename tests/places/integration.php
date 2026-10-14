@@ -285,6 +285,35 @@ $bad_state = it_rest( 'POST', 'poi-places/' . $pin_b['id'] . '/pin', array( 'lat
 t( 'an unknown pin state is a 400', $bad_state->get_status(), 400 );
 
 
+/* ---- Task 10: public page ---- */
+it_clean();
+$GLOBALS['wpdb']->query( 'DELETE FROM ' . atk_table( 'poi_places' ) . " WHERE lat IS NOT NULL AND name LIKE 'ZZ-IT %'" );
+ATK_Poi_Store::flush_cache();
+$real_pinned = array_filter( ATK_Poi_Store::all(), function ( $p ) { return null !== $p['lat']; } );
+if ( ! $real_pinned ) {
+	t( 'with no pinned places the venues list is empty', atk_poi_venues(), array() );
+	ob_start();
+	atk_render_poi_map();
+	$empty_html = ob_get_clean();
+	t( 'the empty map shows the empty-state text', strpos( $empty_html, 'Places will appear here once an instructor imports them.' ) !== false, true );
+	t( 'the empty-state card is visible when there are no places', (bool) preg_match( '/id="atk-poi-empty" class="card[^"]*"/', $empty_html, $m ) && strpos( $m[0], 'd-none' ) === false, true );
+}
+$mk = function ( $name, $status ) {
+	$p = ATK_Poi_Store::save( array( 'name' => $name, 'address' => '1 Rose street', 'status' => $status ) );
+	ATK_Poi_Store::set_pin( $p['id'], 57.15, -2.1, 'looked_up' );
+};
+$mk( 'ZZ-IT Open Place <b>x</b>', 'current' );
+$mk( 'ZZ-IT Closed Place', 'closed' );
+$names = array_column( ATK_Poi_Store::venues(), 'name' );
+t( 'both pinned places are on the map list', array( in_array( 'ZZ-IT Open Place <b>x</b>', $names, true ), in_array( 'ZZ-IT Closed Place', $names, true ) ), array( true, true ) );
+$zz_current = array_filter( ATK_Poi_Store::venues(), function ( $v ) { return 0 === strpos( $v['name'], 'ZZ-IT ' ) && 'closed' !== $v['status']; } );
+t( 'only the open place counts as current', count( $zz_current ), 1 );
+$src = file_get_contents( ATK_PLUGIN_DIR . '/inc/poi-map.php' );
+t( 'the map no longer reads poi.json', strpos( $src, 'poi.json' ), false );
+t( 'the map script reads the REST route', strpos( $src, "rest_url( 'atk/v1/poi-venues' )" ) !== false, true );
+t( 'the old data files are gone', array( file_exists( ATK_PLUGIN_DIR . '/assets/data/poi.json' ), file_exists( ATK_PLUGIN_DIR . '/assets/data/poi-source.csv' ) ), array( false, false ) );
+
+
 /* ---- end ---- */
 it_clean();
 wp_delete_user( $user_id );

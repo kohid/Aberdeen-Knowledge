@@ -96,6 +96,13 @@
 	var venuesLoaded = false;
 	var resultsHighlightActive = false;
 
+	// Place names come from an instructor's spreadsheet, so anything put into markup is escaped.
+	function esc( value ) {
+		return String( value == null ? "" : value ).replace( /[&<>"']/g, function ( c ) {
+			return { "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" }[ c ];
+		} );
+	}
+
 	function setStatusText( text ) {
 		statusTextEl.textContent = text;
 	}
@@ -222,8 +229,16 @@
 
 				renderLegend();
 				venuesLoaded = true;
-				testBtn.disabled = false;
+				var emptyEl = document.getElementById( "atk-poi-empty" );
+				if ( emptyEl ) {
+					emptyEl.classList.toggle( "d-none", ( data.venues || [] ).length > 0 );
+				}
+				var countEl = document.getElementById( "atk-poi-current-count" );
+				if ( countEl ) {
+					countEl.textContent = String( venueNames.length );
+				}
 				testBtn.textContent = testBtnDefaultText;
+				testBtn.disabled = venueNames.length === 0;
 			} )
 			.catch( function () {
 				setStatusText( "Couldn't load places of interest — please try again later." );
@@ -270,18 +285,18 @@
 				var badgeIcon  = result.found ? "bi-check-circle-fill" : "bi-x-circle-fill";
 				var answerText = result.found
 					? "Correct"
-					: ( result.guesses && result.guesses.length ? "You picked: " + result.guesses[ result.guesses.length - 1 ] : "Time ran out" );
+					: ( result.guesses && result.guesses.length ? "You picked: " + esc( result.guesses[ result.guesses.length - 1 ] ) : "Time ran out" );
 				html += '<div class="d-flex align-items-start gap-3 mb-4">'
 					+ '<span class="badge ' + badgeClass + ' p-2"><i class="bi ' + badgeIcon + '"></i></span>'
 					+ '<div class="flex-grow-1">'
-					+ '<div class="fw-bold fs-8 text-gray-800">' + ( i + 1 ) + ". " + result.name + "</div>"
+					+ '<div class="fw-bold fs-8 text-gray-800">' + ( i + 1 ) + ". " + esc( result.name ) + "</div>"
 					+ '<div class="fs-9 text-gray-500">' + answerText + "</div>"
 					+ "</div></div>";
 			} else if ( quizActive && i === sessionIndex ) {
 				html += '<div class="d-flex align-items-start gap-3 mb-4">'
 					+ '<span class="badge badge-light-primary p-2"><i class="bi bi-geo-alt-fill"></i></span>'
 					+ '<div class="flex-grow-1">'
-					+ '<div class="fw-bold fs-8 text-gray-800">' + ( i + 1 ) + ". " + name + "</div>"
+					+ '<div class="fw-bold fs-8 text-gray-800">' + ( i + 1 ) + ". " + esc( name ) + "</div>"
 					+ '<div class="fs-9 text-gray-500">Current question</div>'
 					+ "</div></div>";
 			} else {
@@ -506,10 +521,10 @@
 			var badgeClass = r.found ? "badge-success" : "badge-danger";
 			var badgeText  = r.found ? "Correct" : "Incorrect";
 			var guessesText = r.guesses && r.guesses.length
-				? "Your answer: " + r.guesses.join( " → " )
+				? "Your answer: " + r.guesses.map( esc ).join( " → " )
 				: "No pin clicked (time ran out)";
 			html += '<div class="atk-map-review-row">'
-				+ '<div><div class="fw-bold">' + r.name + "</div>"
+				+ '<div><div class="fw-bold">' + esc( r.name ) + "</div>"
 				+ '<div class="atk-map-review-guesses">' + guessesText + "</div></div>"
 				+ '<span class="badge ' + badgeClass + '">' + badgeText + "</span>"
 				+ "</div>";

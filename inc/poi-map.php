@@ -1,20 +1,17 @@
 <?php
 /**
- * "Places of Interest" full-screen map study tool — same Study Mode/Take
+ * "Places of Interest" full-screen map study tool: same Study Mode/Take
  * Test/Review pattern as Major Streets (inc/arteries-map.php), but pins
  * instead of street lines.
  *
- * assets/data/poi.json is real, git-tracked data: geocoded once from
- * assets/data/poi-source.csv via a one-off script (not committed — see the
- * theme's CLAUDE.md), never written to at runtime. A venue only made it
- * into poi.json if Nominatim resolved it to a specific, confidently-typed
- * location (a real amenity/tourism/etc. match, not just a postcode-area
- * centroid) — venues that couldn't be confidently located were left out
- * rather than guessed at.
+ * The places are the ones an instructor imported or added under Study Tools >
+ * Places of Interest (inc/poi-places.php). Only places with a map pin appear
+ * here. The map reads them from the public REST route atk/v1/poi-venues, so a
+ * cached copy of this page never shows an out-of-date list.
  *
- * 'closed'/'relocated' venues are still included (visible, hoverable, with
- * their status shown) but excluded from the Take Test pool — quizzing a
- * driver on a location that's no longer valid would teach the wrong thing.
+ * 'closed'/'relocated' venues are still shown (visible, hoverable, with their
+ * status) but excluded from the Take Test pool: quizzing a driver on a place
+ * that no longer exists would teach the wrong thing.
  */
 
 defined( 'ABSPATH' ) || exit;
@@ -23,16 +20,14 @@ const ATK_POI_SESSION_SIZE = 5;
 const ATK_POI_MINUTES      = 15;
 
 /**
- * The real Places of Interest data, cached for the request. Used by the
- * map itself and to show a count on the Study Tool hub card.
+ * The pinned Places of Interest, cached for the request. Used by the map itself
+ * and to show a count on the Study Tools hub card.
  */
 function atk_poi_venues() {
 	static $venues = null;
 
 	if ( null === $venues ) {
-		$path   = ATK_PLUGIN_DIR . '/assets/data/poi.json';
-		$data   = file_exists( $path ) ? json_decode( file_get_contents( $path ), true ) : null;
-		$venues = $data['venues'] ?? array();
+		$venues = ATK_Poi_Store::venues();
 	}
 
 	return $venues;
@@ -43,7 +38,7 @@ function atk_render_poi_map() {
 
 	wp_enqueue_script( 'atk-poi-map', ATK_PLUGIN_URI . '/assets/js/poi-map.js', array( 'leaflet', 'atk-plugins-bundle' ), filemtime( ATK_PLUGIN_DIR . '/assets/js/poi-map.js' ), true );
 	wp_add_inline_script( 'atk-poi-map', 'var ATK_POI = ' . wp_json_encode( array(
-		'dataUrl'      => ATK_PLUGIN_URI . '/assets/data/poi.json',
+		'dataUrl'      => esc_url_raw( rest_url( 'atk/v1/poi-venues' ) ),
 		'sessionSize'  => ATK_POI_SESSION_SIZE,
 		'minutes'      => ATK_POI_MINUTES,
 		'backUrl'      => atk_get_page_url( 'study-tools' ),
@@ -74,6 +69,13 @@ function atk_render_poi_map() {
 			</div>
 		</div>
 
+		<div id="atk-poi-empty" class="card shadow-sm position-absolute top-50 start-50 translate-middle<?php echo atk_poi_venues() ? ' d-none' : ''; ?>" style="z-index: 1000; max-width: 360px;" role="status">
+			<div class="card-body p-6 text-center">
+				<h2 class="fs-4 fw-bolder text-gray-900 mb-2">No places yet</h2>
+				<p class="text-gray-700 fs-6 mb-0">Places will appear here once an instructor imports them.</p>
+			</div>
+		</div>
+
 		<div id="atk-poi-legend" class="card shadow-sm position-absolute d-none" style="top: 70px; right: 16px; z-index: 999; width: 260px; max-height: calc(100vh - 100px); overflow-y: auto;">
 			<div class="card-body p-4" id="atk-poi-legend-body"></div>
 		</div>
@@ -98,7 +100,7 @@ function atk_render_poi_map() {
 				</div>
 				<div class="modal-body">
 					<p class="text-gray-700 fs-6 mb-0">
-						Explore Aberdeen's notable venues — hotels, restaurants, museums, sports facilities and more — colour-coded by category. Hover any pin in Study Mode to see its name. When you're ready, use <strong>Take Test</strong> to be prompted to find <?php echo esc_html( ATK_POI_SESSION_SIZE ); ?> of the <?php echo esc_html( count( array_filter( atk_poi_venues(), function ( $v ) { return ! in_array( $v['status'], array( 'closed', 'relocated' ), true ); } ) ) ); ?> current places of interest.
+						Explore Aberdeen's notable venues — hotels, restaurants, museums, sports facilities and more — colour-coded by category. Hover any pin in Study Mode to see its name. When you're ready, use <strong>Take Test</strong> to be prompted to find <?php echo esc_html( ATK_POI_SESSION_SIZE ); ?> of the <span id="atk-poi-current-count"><?php echo esc_html( count( array_filter( atk_poi_venues(), function ( $v ) { return ! in_array( $v['status'], array( 'closed', 'relocated' ), true ); } ) ) ); ?></span> current places of interest.
 					</p>
 				</div>
 				<div class="modal-footer">
