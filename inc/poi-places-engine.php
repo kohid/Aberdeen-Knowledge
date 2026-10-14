@@ -365,6 +365,44 @@ class ATK_Poi_Planner {
 
 	const DEFAULT_CATEGORY = 'Other Amenities';
 
+	/**
+	 * A category for a place whose sheet gave none. A name from the curated list
+	 * wins; otherwise the first keyword rule that fits the name; otherwise the
+	 * default. It is a suggestion the instructor can change in the Edit place form.
+	 *
+	 * @param string               $name  Place name.
+	 * @param array<string,string> $known Lower-case name => category, from poi-category-hints.json.
+	 */
+	public static function guess_category( $name, array $known = array() ) {
+		$name  = trim( (string) $name );
+		$lower = mb_strtolower( $name, 'UTF-8' );
+		if ( isset( $known[ $lower ] ) && in_array( $known[ $lower ], self::CATEGORIES, true ) ) {
+			return $known[ $lower ];
+		}
+		$rules = array(
+			array( 'Living Spaces', '/\b(apartments?|flats|residences?|sheltered housing)\b/iu' ),
+			array( 'Religious Buildings & Cemeteries', '/\b(church|cathedral|chapel|mosque|kirk|cemetery|synagogue|gurdwara|temple)\b/iu' ),
+			array( 'Hotels', '/\b(hotel|inn|lodge|guest\s*house|hostel|motel|aparthotel)\b/iu' ),
+			array( 'Schools Libraries & Learning', '/\b(school|academy|college|university|library|libraries|nursery|faculty)\b/iu' ),
+			array( 'Community Centres', '/\bcommunity\b|\blearning\s+centre\b/iu' ),
+			array( 'Transport Hubs', '/\b(station|airport|railway|ferry|terminal)\b/iu' ),
+			array( 'Sports Facilities', '/\b(sports?|golf|swimming|pool|leisure|gym|football|cricket|rugby|bowling|bowls|squash|tennis|arena|stadium|snowsports|health\s+club|fitness|racketball|curling|skating)\b|(?<!caravan\s)\bpark$/iu' ),
+			array( 'Clubs & Members Clubs', '/\b(club|society)\b/iu' ),
+			array( 'Museums Arts & Culture', '/\b(museum|gallery|theatre|theater|cinema|arts?|ballroom|gardens?|heritage|science\s+centre)\b/iu' ),
+			array( 'Restaurants and Cafes', '/\b(restaurant|cafe|café|coffee|bar|pub|kitchen|bistro|grill|brew|tavern|bakery|takeaway|tea\s?room|brasserie|pizzeria|deli)\b/iu' ),
+			array( 'Living Spaces', '/\bcourt$/iu' ),
+		);
+		foreach ( $rules as $rule ) {
+			if ( preg_match( $rule[1], $name ) ) {
+				if ( 'Living Spaces' === $rule[0] && preg_match( '/\b(sheriff|law|justice|tennis|squash|food)\s+court$/iu', $name ) ) {
+					continue;
+				}
+				return $rule[0];
+			}
+		}
+		return self::DEFAULT_CATEGORY;
+	}
+
 	/** The same place is the same name (any case) at the same postcode. */
 	public static function place_key( $name, $postcode ) {
 		return mb_strtolower( trim( (string) $name ), 'UTF-8' ) . '|' . ATK_Poi_Parser::tidy_postcode( $postcode );
@@ -438,7 +476,7 @@ class ATK_Poi_Planner {
 				'ward_id'       => $ward_id,
 				'street_answer' => $street_answer,
 				'suggestion'    => $street['suggestion'],
-				'category'      => $category ? $category : self::DEFAULT_CATEGORY,
+				'category'      => $category ? $category : self::guess_category( $row['name'], isset( $ctx['category_hints'] ) ? (array) $ctx['category_hints'] : array() ),
 				'category_given' => null !== $category,
 				'status'        => 'closed' === mb_strtolower( trim( $row['status'] ), 'UTF-8' ) ? 'closed' : 'current',
 				'status_given'  => '' !== trim( $row['status'] ),

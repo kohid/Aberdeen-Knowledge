@@ -45,6 +45,15 @@ $plan = ATK_Poi_Planner::plan( array(
 	row( 10, 'Plain Place', '5 Rose street, AB10 1AE', 'AB10 1AE', 'George St/Harbour', '', '' ),
 ), $ctx );
 
+$sorted_plan = ATK_Poi_Planner::plan( array(
+	row( 2, 'Hilton Treetops Hotel', '161 Springfield Road', 'AB15 7AA', 'Midstocket/Rosemount' ),
+	row( 3, 'Plain Place', '5 Rose street', 'AB10 1AE', 'Midstocket/Rosemount' ),
+	row( 4, 'Given Hotel', '6 Rose street', 'AB10 1AF', 'Midstocket/Rosemount', 'Clubs & Members Clubs' ),
+), $ctx + array( 'category_hints' => array( 'plain place' => 'Community Centres' ) ) );
+check( 'a new place with no category is sorted from its name', $sorted_plan[0]['category'], 'Hotels' );
+check( 'a guessed category is not marked as given by the sheet', array( $sorted_plan[0]['category_given'], $sorted_plan[2]['category_given'] ), array( false, true ) );
+check( 'a curated hint wins over the keywords', $sorted_plan[1]['category'], 'Community Centres' );
+check( 'a category the sheet gives is kept', $sorted_plan[2]['category'], 'Clubs & Members Clubs' );
 check( 'one plan row per sheet row', count( $plan ), 9 );
 check( 'existing place is an update', $plan[0]['action'], 'update' );
 check( 'update keeps the existing id', $plan[0]['existing_id'], 7 );
@@ -157,6 +166,25 @@ check( 'a place with no street answer is left out and named', $plan['weeks'][1][
 check( 'a closed place is not asked', count( $plan['weeks'][1]['questions'] ), 0 );
 check( 'places outside the 13 wards are reported', array_column( $plan['outside'], 'name' ), array( 'Trinity Court', 'No Ward Place' ) );
 check( 'each week carries five tests', count( $plan['weeks'][7]['tests'] ), 5 );
+
+
+/* ---- category guessing ---- */
+$hints = array( 'blackwell university bookshop' => 'Other Amenities' );
+$guess = function ( $name ) use ( $hints ) { return ATK_Poi_Planner::guess_category( $name, $hints ); };
+check( 'a curated name wins over the keywords', $guess( 'Blackwell University Bookshop' ), 'Other Amenities' );
+check( 'hotel words make Hotels', array( $guess( 'Chester Hotel' ), $guess( 'Jurys Inn Aberdeen' ), $guess( 'Station Hotel' ), $guess( 'Aberdeen Youth Hostel' ) ), array( 'Hotels', 'Hotels', 'Hotels', 'Hotels' ) );
+check( 'apartments are Living Spaces even with Lodge in the name', array( $guess( 'The Lodge Apartments' ), $guess( 'Meadow Court' ), $guess( 'City Wharf Apartments' ) ), array( 'Living Spaces', 'Living Spaces', 'Living Spaces' ) );
+check( 'a hotel with Court in the name stays a hotel', $guess( 'Palm Court Hotel' ), 'Hotels' );
+check( 'churches and mosques are Religious', array( $guess( "St Mary's Cathedral" ), $guess( 'Mannofield Church' ), $guess( 'Aberdeen Mosque and Islamic Centre' ) ), array( 'Religious Buildings & Cemeteries', 'Religious Buildings & Cemeteries', 'Religious Buildings & Cemeteries' ) );
+check( 'schools and libraries are Schools Libraries & Learning', array( $guess( 'Albyn School' ), $guess( 'Woodside Library' ), $guess( 'Cults Library and Learning Centre' ) ), array( 'Schools Libraries & Learning', 'Schools Libraries & Learning', 'Schools Libraries & Learning' ) );
+check( 'community centres', array( $guess( 'Dyce Community Centre' ), $guess( 'Rosemount Community Education Centre' ) ), array( 'Community Centres', 'Community Centres' ) );
+check( 'sports places, including bowling and tennis clubs', array( $guess( 'Peterculter Sports Centre' ), $guess( 'Dyce Bowling Club' ), $guess( 'Auchmill Golf Course' ), $guess( 'Stewart Park' ), $guess( 'Linx Ice Arena' ) ), array( 'Sports Facilities', 'Sports Facilities', 'Sports Facilities', 'Sports Facilities', 'Sports Facilities' ) );
+check( 'a social club is a members club', $guess( 'Parkvale Social Club' ), 'Clubs & Members Clubs' );
+check( 'museums, galleries and theatres', array( $guess( 'Tolbooth Museum' ), $guess( 'Aberdeen Art Gallery' ), $guess( "His Majesty's Theatre" ), $guess( 'Beach Ballroom' ) ), array( 'Museums Arts & Culture', 'Museums Arts & Culture', 'Museums Arts & Culture', 'Museums Arts & Culture' ) );
+check( 'places to eat and drink', array( $guess( '99 Bar & Kitchen' ), $guess( 'Moonfish Cafe' ) ), array( 'Restaurants and Cafes', 'Restaurants and Cafes' ) );
+check( 'transport', $guess( 'Aberdeen Bus Station' ), 'Transport Hubs' );
+check( 'a caravan park is not a sports park', $guess( 'Seaview Caravan Park' ), 'Other Amenities' );
+check( 'anything unrecognised is Other Amenities', $guess( 'National Hyperbaric Centre' ), 'Other Amenities' );
 
 echo "\n$checks checks, $failures failed\n";
 exit( $failures ? 1 : 0 );

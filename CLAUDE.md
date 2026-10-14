@@ -191,6 +191,13 @@ empty and the instructor imports the official sheet.
   against the real road names from the address (right to left), never guessed; a close lookalike is only a suggestion.
   A ward not on the site is created only when the review box is ticked (ticking one row creates it for every row naming it).
   The server rebuilds the plan at save time.
+- **Categories**: the official sheet has no Category column, so a place with none given is sorted from its name
+  (`ATK_Poi_Planner::guess_category`): first `assets/data/poi-category-hints.json` (`categories` = the hand-sorted names of the
+  87 original venues, `suggested` = unchecked suggestions from general knowledge, curated wins), then keyword rules, then
+  Other Amenities. A guess is only used for a new place; an existing place's category changes only when the sheet gives one.
+  On update, `atk_poi_sort_categories_once` moves places still on Other Amenities once (option `atk_poi_categories_sorted`).
+  The category drives the public map's pin colour and icon (`CATEGORY_META` in `assets/js/poi-map.js`), so a map of
+  all red pins means every place is on Other Amenities.
 - **Pins**: the instructor's browser looks each new or changed place up through Nominatim (`assets/js/poi-geo.js` holds the
   accept rules, one request a second, Aberdeen area box, named result, allowed OSM classes) and the server checks the box
   again. Places without a pin can be placed by hand (`manual`, never replaced by a lookup). The public Nominatim server is for

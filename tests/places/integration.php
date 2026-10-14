@@ -489,6 +489,21 @@ t( 'the screen data tells the form what research already accepts', isset( $seen[
 ATK_Poi_Store::delete( $mk_art['id'] );
 ATK_Poi_Store::delete( $p['id'] );
 
+/* ---- sorting places into categories ---- */
+$c1 = ATK_Poi_Store::save( array( 'name' => 'ZZ-IT Grand Hotel', 'postcode' => 'AB10 1AA', 'category' => 'Other Amenities' ) );
+$c2 = ATK_Poi_Store::save( array( 'name' => 'ZZ-IT Plain Thing', 'postcode' => 'AB10 1AB', 'category' => 'Other Amenities' ) );
+$c3 = ATK_Poi_Store::save( array( 'name' => 'ZZ-IT Kept Hotel', 'postcode' => 'AB10 1AC', 'category' => 'Sports Facilities' ) );
+$moved = ATK_Poi_Store::sort_default_categories();
+t( 'sorting changes only places that can be told apart', $moved >= 1, true );
+t( 'a default-category hotel moves to Hotels', ATK_Poi_Store::get( $c1['id'] )['category'], 'Hotels' );
+t( 'a place with no clue stays on Other Amenities', ATK_Poi_Store::get( $c2['id'] )['category'], 'Other Amenities' );
+t( 'a category the instructor chose is never touched', ATK_Poi_Store::get( $c3['id'] )['category'], 'Sports Facilities' );
+$hints = ATK_Poi_Store::category_hints();
+t( 'the hints file has curated and suggested names', array( $hints['tolbooth museum'], $hints['blue lamp'] ), array( 'Museums Arts & Culture', 'Restaurants and Cafes' ) );
+ATK_Poi_Store::delete( $c1['id'] );
+ATK_Poi_Store::delete( $c2['id'] );
+ATK_Poi_Store::delete( $c3['id'] );
+
 /* ---- end ---- */
 it_clean();
 wp_delete_user( $user_id );

@@ -264,6 +264,45 @@ class ATK_Poi_Store {
 		return self::get( $id );
 	}
 
+	/** Lower-case place name => category: the curated list, then the suggested one. */
+	public static function category_hints() {
+		$file = ATK_PLUGIN_DIR . '/assets/data/poi-category-hints.json';
+		$data = is_readable( $file ) ? json_decode( (string) file_get_contents( $file ), true ) : array();
+		$out  = array();
+		foreach ( array( 'suggested', 'categories' ) as $group ) {
+			foreach ( is_array( $data ) && ! empty( $data[ $group ] ) ? (array) $data[ $group ] : array() as $name => $category ) {
+				$out[ mb_strtolower( trim( (string) $name ), 'UTF-8' ) ] = (string) $category;
+			}
+		}
+		return $out;
+	}
+
+	/**
+	 * Moves places still on the default category into the category their name
+	 * suggests. Places the instructor already put elsewhere are not touched.
+	 *
+	 * @return int How many places changed.
+	 */
+	public static function sort_default_categories() {
+		global $wpdb;
+		$hints   = self::category_hints();
+		$changed = 0;
+		foreach ( self::all() as $place ) {
+			if ( ATK_Poi_Planner::DEFAULT_CATEGORY !== $place['category'] ) {
+				continue;
+			}
+			$guess = ATK_Poi_Planner::guess_category( $place['name'], $hints );
+			if ( $guess !== $place['category'] ) {
+				$wpdb->update( self::table(), array( 'category' => $guess ), array( 'id' => $place['id'] ) );
+				$changed++;
+			}
+		}
+		if ( $changed ) {
+			self::flush_cache();
+		}
+		return $changed;
+	}
+
 	/** Plans an import against what is saved. @param array[] $parsed_rows ATK_Poi_Parser rows. */
 	public static function plan_rows( array $parsed_rows ) {
 		$existing = array();
@@ -271,6 +310,7 @@ class ATK_Poi_Store {
 			$existing[] = array( 'id' => $place['id'], 'name' => $place['name'], 'postcode' => $place['postcode'], 'street_answer' => $place['street_answer'] );
 		}
 		return ATK_Poi_Planner::plan( $parsed_rows, array(
+			'category_hints' => self::category_hints(),
 			'wards'    => self::wards(),
 			'existing' => $existing,
 			'roads'    => ATK_Nb_Store::known_street_names(),
@@ -950,4 +990,19 @@ function atk_handle_instructor_fill_poi_course() {
 		'fill_created' => $result['weeks_created'], 'fill_filled' => $result['weeks_filled'],
 		'fill_replaced' => $result['weeks_replaced'], 'fill_kept' => $result['weeks_kept'], 'fill_q' => $result['questions'],
 	) );
+}
+
+
+/** One time, after an update: places imported without a category were all saved as Other Amenities, so sort them. */
+add_action( 'init', 'atk_poi_sort_categories_once', 20 );
+function atk_poi_sort_categories_once() {
+	if ( get_option( 'atk_poi_categories_sorted' ) || ! function_exists( 'atk_table' ) ) {
+		return;
+	}
+	global $wpdb;
+	if ( (int) get_option( 'atk_db_version', 0 ) < 6 || ! $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', atk_table( 'poi_places' ) ) ) ) {
+		return;
+	}
+	ATK_Poi_Store::sort_default_categories();
+	update_option( 'atk_poi_categories_sorted', 1, false );
 }
