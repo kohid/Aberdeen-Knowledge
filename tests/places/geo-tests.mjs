@@ -37,6 +37,9 @@ check( "queries: duplicates are dropped", geo.buildQueries( { name: "Babylon", a
 const url = geo.searchUrl( "22 CLUB, AB10 1UB" );
 check( "the search is bounded to the box", url.indexOf( "bounded=1" ) > -1 && url.indexOf( "viewbox=-2.4,57.3,-1.95,57" ) > -1, true );
 check( "the search is limited to Great Britain, jsonv2", url.indexOf( "countrycodes=gb" ) > -1 && url.indexOf( "format=jsonv2" ) > -1, true );
+check( "the lookup asks for 5 results by default", url.indexOf( "limit=5&" ) > -1, true );
+check( "the pin box can ask for more, never over 10", [ geo.searchUrl( "x", 8 ).indexOf( "limit=8&" ) > -1, geo.searchUrl( "x", 99 ).indexOf( "limit=10&" ) > -1 ], [ true, true ] );
+check( "a bad limit falls back to 5", geo.searchUrl( "x", "abc" ).indexOf( "limit=5&" ) > -1, true );
 check( "the query is encoded", url.indexOf( "q=22%20CLUB%2C%20AB10%201UB" ) > -1, true );
 
 console.log( "\n" + checks + " checks, " + failures + " failed" );

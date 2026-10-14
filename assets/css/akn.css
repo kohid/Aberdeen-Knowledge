@@ -1834,3 +1834,6 @@ body.akn-app,body.akn-auth{min-height:100vh}
 
 /* Places pin picker. */
 .akn-poi-pin-map{height:min(60vh,26rem);width:100%}
+.akn-poi-pin-results{max-height:11rem;overflow-y:auto}
+.akn-poi-pin-results:empty{display:none}
+button.list-group-item.list-group-item-action{white-space:normal;text-align:left;overflow-wrap:anywhere}

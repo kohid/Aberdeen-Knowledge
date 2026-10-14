@@ -200,8 +200,11 @@ empty and the instructor imports the official sheet.
   all red pins means every place is on Other Amenities.
 - **Pins**: the instructor's browser looks each new or changed place up through Nominatim (`assets/js/poi-geo.js` holds the
   accept rules, one request a second, Aberdeen area box, named result, allowed OSM classes) and the server checks the box
-  again. Places without a pin can be placed by hand (`manual`, never replaced by a lookup). The public Nominatim server is for
-  light use.
+  again. The "Look up missing pins" button is always shown (disabled while a lookup runs or when nothing is missing); it covers
+  places never looked up and places that were not found. Places without a pin can be placed by hand (`manual`, never replaced by
+  a lookup): the "Place the pin" box has a search field (prefilled with the place name, results limited to the Aberdeen box, no
+  class filter so streets and postcodes work, one request a second shared with the lookup) and the map click. The public
+  Nominatim server is for light use.
 - **Dashboard order**: one section per ward, ordered by the Course Builder's weeks (poi-track weeks, then street-track weeks).
 - **Official POI test**: the Course Builder's POI Test track has a card, "Fill the Official POI test from your places"
   (`atk_render_instructor_poi_course_card()`), that makes 13 weeks, one per Aberdeen City Council ward in official order

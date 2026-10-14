@@ -67,8 +67,9 @@
 		return found;
 	}
 
-	function searchUrl( query ) {
-		return "https://nominatim.openstreetmap.org/search?format=jsonv2&limit=5&countrycodes=gb&bounded=1"
+	/** limit is optional (default 5); the pin box asks for a few more so a person can choose. */
+	function searchUrl( query, limit ) {
+		return "https://nominatim.openstreetmap.org/search?format=jsonv2&limit=" + ( limit > 0 ? Math.min( Math.floor( limit ), 10 ) : 5 ) + "&countrycodes=gb&bounded=1"
 			+ "&viewbox=" + [ BOX.lngMin, BOX.latMax, BOX.lngMax, BOX.latMin ].join( "," )
 			+ "&q=" + encodeURIComponent( query );
 	}

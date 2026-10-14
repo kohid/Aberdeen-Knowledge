@@ -134,7 +134,7 @@
 						"<div class=\"text-gray-600 fs-6\" id=\"atk-poi-summary\"></div>" +
 					"</div>" +
 					"<div class=\"card-toolbar flex-wrap gap-3\">" +
-						"<button type=\"button\" class=\"btn btn-light-warning d-none\" id=\"atk-poi-lookup-btn\" data-act=\"lookup-missing\"></button>" +
+						"<button type=\"button\" class=\"btn btn-light-warning\" id=\"atk-poi-lookup-btn\" data-act=\"lookup-missing\"></button>" +
 						"<button type=\"button\" class=\"btn btn-light-primary\" id=\"atk-poi-import-btn\" data-act=\"import\">Import spreadsheet</button>" +
 						"<button type=\"button\" class=\"btn btn-primary\" data-act=\"add\">Add place</button>" +
 					"</div>" +
@@ -227,6 +227,14 @@
 						"<button type=\"button\" class=\"btn-close\" data-bs-dismiss=\"modal\" aria-label=\"Close\"></button></div>" +
 					"<div class=\"modal-body\">" +
 						"<p class=\"text-gray-700 fs-6 mb-4\" id=\"atk-poi-pin-help\"></p>" +
+						"<form id=\"atk-poi-pin-search\" class=\"mb-4\" role=\"search\" novalidate>" +
+							"<div class=\"input-group\">" +
+								"<input type=\"search\" class=\"form-control form-control-solid\" id=\"atk-poi-pin-q\" placeholder=\"Search for the place, a street or a postcode\" aria-label=\"Search the map\" autocomplete=\"off\">" +
+								"<button type=\"submit\" class=\"btn btn-light-primary\" id=\"atk-poi-pin-find\">Search</button>" +
+							"</div>" +
+							"<div id=\"atk-poi-pin-results\" class=\"list-group akn-poi-pin-results mt-3\"></div>" +
+							"<div id=\"atk-poi-pin-note\" class=\"text-gray-600 fs-7 mt-2\" role=\"status\" aria-live=\"polite\"></div>" +
+						"</form>" +
 						"<div id=\"atk-poi-pin-map\" class=\"akn-poi-pin-map rounded\" role=\"application\" aria-label=\"Map. Click to place the pin.\"></div>" +
 						"<div id=\"atk-poi-pin-error\" class=\"text-danger fs-6 mt-3\" role=\"alert\"></div>" +
 					"</div>" +
@@ -263,10 +271,11 @@
 		}
 		$( "#atk-poi-summary" ).textContent = parts.join(", ");
 
-		var waiting = placesWaiting().length;
+		var waiting = placesWithoutPin().length;
 		var lookupBtn = $( "#atk-poi-lookup-btn" );
-		lookupBtn.classList.toggle( "d-none", ! waiting || look.running );
-		lookupBtn.textContent = "Look up missing pins (" + waiting + ")";
+		lookupBtn.disabled = look.running || ! waiting;
+		lookupBtn.textContent = look.running ? "Looking up pins" : "Look up missing pins" + ( waiting ? " (" + waiting + ")" : "" );
+		lookupBtn.title = look.running ? "A lookup is running." : ( waiting ? "Search OpenStreetMap for the places that have no pin. Places you placed by hand are never moved." : "Every place has a pin." );
 
 		var select = $( "#atk-poi-ward-filter" );
 		var options = [ "<option value=\"\">All wards</option>" ];
@@ -509,6 +518,13 @@
 		} );
 	}
 
+	/* Everything without a pin that was not placed by hand: never looked up, or looked up and not found. */
+	function placesWithoutPin() {
+		return allPlaces().map( function ( item ) { return item.place; } ).filter( function ( p ) {
+			return p.geo_state === "none" || p.geo_state === "not_found";
+		} );
+	}
+
 	function renderLookup() {
 		var box = $( "#atk-poi-lookup" );
 		if ( ! look.running && ! look.note ) {
@@ -595,7 +611,7 @@
 			var summary = look.found + " pins found, " + look.missed + " not found.";
 			look.note = look.error ?
 				"The lookup stopped. " + look.failure + " " + summary + " " + plural( left, "place is", "places are" ) + " still waiting. Use Look up missing pins to try again later." :
-				( look.stop ? "Lookup stopped. " + summary + " " + plural( left, "place is", "places are" ) + " still waiting." : "Lookup finished. " + summary + ( look.missed ? " Places that were not found can be placed by hand: click their pin badge." : "" ) );
+				( look.stop ? "Lookup stopped. " + summary + " " + plural( left, "place is", "places are" ) + " still waiting." : "Lookup finished. " + summary + ( look.missed ? " Places that were not found can be placed by hand: click their pin badge, then search or click the map." : "" ) );
 			look.running = false;
 			return reload().then( renderLookup );
 		} );
@@ -615,6 +631,102 @@
 		$( "#atk-poi-pin-save" ).disabled = false;
 	}
 
+	/* ---------- search inside the pin box (one request a second, shared with the lookup) ---------- */
+
+	var pinSearch = { token: 0, last: 0, results: [] };
+
+	function pinSearchReset() {
+		pinSearch.token++;
+		pinSearch.results = [];
+		$( "#atk-poi-pin-results" ).innerHTML = "";
+		$( "#atk-poi-pin-note" ).textContent = "";
+		$( "#atk-poi-pin-find" ).disabled = false;
+	}
+
+	function pinResultLabel( result ) {
+		var parts = String( result.display_name || "" ).split( "," );
+		var title = ( typeof result.name === "string" && result.name.trim() ) || parts[ 0 ].trim() || "Unnamed place";
+		var rest = parts.slice( 1 ).join( "," ).trim();
+		return "<span class=\"fw-bold text-gray-900 d-block\">" + esc( title ) + "</span>" +
+			( rest ? "<span class=\"text-gray-600 fs-7 d-block\">" + esc( rest ) + "</span>" : "" );
+	}
+
+	function showPinResults( results ) {
+		pinSearch.results = results;
+		$( "#atk-poi-pin-results" ).innerHTML = results.map( function ( result, i ) {
+			return "<button type=\"button\" class=\"list-group-item list-group-item-action\" data-result=\"" + i + "\">" + pinResultLabel( result ) + "</button>";
+		} ).join( "" );
+	}
+
+	function choosePinResult( index ) {
+		var result = pinSearch.results[ index ];
+		if ( ! result || ! picker.map ) {
+			return;
+		}
+		var latlng = window.L.latLng( parseFloat( result.lat ), parseFloat( result.lon ) );
+		picker.map.setView( latlng, 18 );
+		placePicker( latlng );
+		Array.prototype.forEach.call( document.querySelectorAll( "#atk-poi-pin-results .list-group-item" ), function ( item ) {
+			var on = item.getAttribute( "data-result" ) === String( index );
+			item.classList.toggle( "active", on );
+			if ( on ) {
+				item.setAttribute( "aria-current", "true" );
+			} else {
+				item.removeAttribute( "aria-current" );
+			}
+		} );
+		$( "#atk-poi-pin-note" ).textContent = "Pin set. Click the map to move it, then choose Save pin.";
+	}
+
+	function runPinSearch( event ) {
+		event.preventDefault();
+		var query = $( "#atk-poi-pin-q" ).value.trim();
+		var note = $( "#atk-poi-pin-note" );
+		if ( ! query ) {
+			note.textContent = "Type a place, street or postcode to search.";
+			return;
+		}
+		if ( look.running ) {
+			note.textContent = "A pin lookup is running. Stop it or wait for it to finish, then search.";
+			return;
+		}
+		var token = ++pinSearch.token;
+		var button = $( "#atk-poi-pin-find" );
+		button.disabled = true;
+		$( "#atk-poi-pin-results" ).innerHTML = "";
+		note.textContent = "Searching OpenStreetMap";
+		var wait = Math.max( 0, pinSearch.last + 1000 - Date.now() );
+		sleep( wait ).then( function () {
+			pinSearch.last = Date.now();
+			return fetch( GEO.searchUrl( query, 8 ), { headers: { Accept: "application/json" } } );
+		} ).then( function ( response ) {
+			if ( ! response.ok ) {
+				throw new Error( "OpenStreetMap answered " + response.status + "." );
+			}
+			return response.json();
+		} ).then( function ( results ) {
+			if ( token !== pinSearch.token ) {
+				return;
+			}
+			results = ( results || [] ).filter( function ( r ) {
+				return GEO.inBox( parseFloat( r.lat ), parseFloat( r.lon ) );
+			} );
+			button.disabled = false;
+			if ( ! results.length ) {
+				note.textContent = "Nothing found in the Aberdeen area for \u201c" + query + "\u201d. Try the street or the postcode, or click the map.";
+				return;
+			}
+			showPinResults( results );
+			note.textContent = plural( results.length, "match", "matches" ) + ". Choose one to put the pin there.";
+		} ).catch( function ( error ) {
+			if ( token !== pinSearch.token ) {
+				return;
+			}
+			button.disabled = false;
+			note.textContent = "The search could not run. " + ( error && error.message ? error.message : "Check your connection and try again." );
+		} );
+	}
+
 	function openPinPicker( place ) {
 		if ( ! window.L ) {
 			fail( new Error( "The map did not load. Check your connection and try again." ) );
@@ -624,7 +736,9 @@
 		$( "#atk-poi-pin-error" ).textContent = "";
 		$( "#atk-poi-pin-save" ).disabled = true;
 		$( "#atk-poi-pin-title" ).textContent = "Place the pin for " + place.name;
-		$( "#atk-poi-pin-help" ).textContent = ( place.address ? place.address + ". " : "" ) + "Click the map where the place is. The pin is saved as placed by hand and a later lookup will not move it.";
+		$( "#atk-poi-pin-help" ).textContent = ( place.address ? place.address + ". " : "" ) + "Search for the place or click the map where it is. The pin is saved as placed by hand and a later lookup will not move it.";
+		$( "#atk-poi-pin-q" ).value = place.name;
+		pinSearchReset();
 		var el = document.getElementById( "atk-poi-pin-modal" );
 		el.addEventListener( "shown.bs.modal", function () {
 			var B = GEO.BOX;
@@ -636,6 +750,10 @@
 				} ).addTo( picker.map );
 				picker.map.on( "click", function ( event ) {
 					if ( GEO.inBox( event.latlng.lat, event.latlng.lng ) ) {
+						Array.prototype.forEach.call( document.querySelectorAll( "#atk-poi-pin-results .active" ), function ( item ) {
+							item.classList.remove( "active" );
+							item.removeAttribute( "aria-current" );
+						} );
 						placePicker( event.latlng );
 					}
 				} );
@@ -1015,7 +1133,7 @@
 				openPinPicker( pinned );
 			}
 		} else if ( act === "lookup-missing" ) {
-			lookupPins( placesWaiting() );
+			lookupPins( placesWithoutPin() );
 		} else if ( act === "lookup-stop" ) {
 			look.stop = true;
 		}
@@ -1028,6 +1146,13 @@
 		$( "#atk-poi-delete-confirm" ).addEventListener( "click", confirmDelete );
 		bindImport();
 		$( "#atk-poi-pin-save" ).addEventListener( "click", savePin );
+		$( "#atk-poi-pin-search" ).addEventListener( "submit", runPinSearch );
+		$( "#atk-poi-pin-results" ).addEventListener( "click", function ( event ) {
+			var item = event.target.closest( "[data-result]" );
+			if ( item ) {
+				choosePinResult( parseInt( item.getAttribute( "data-result" ), 10 ) );
+			}
+		} );
 		$( "#atk-poi-search" ).addEventListener( "input", function ( event ) {
 			state.search = event.target.value;
 			renderList();
