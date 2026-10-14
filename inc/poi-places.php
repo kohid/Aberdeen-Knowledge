@@ -512,3 +512,25 @@ function atk_poi_read_input( WP_REST_Request $request ) {
 	}
 	return ATK_Poi_Parser::parse_rows( $table );
 }
+
+/* -------------------------------------------------------------------- */
+/* Dashboard screen (Study Tools > Places of Interest)                   */
+/* -------------------------------------------------------------------- */
+
+/** The REST address, nonce and category list the screen's script needs. */
+function atk_poi_script_config() {
+	return 'var ATK_POI_ADMIN = ' . wp_json_encode( array(
+		'restUrl'    => esc_url_raw( rest_url( 'atk/v1/' ) ),
+		'nonce'      => wp_create_nonce( 'wp_rest' ),
+		'categories' => ATK_Poi_Planner::CATEGORIES,
+	) ) . ';';
+}
+
+function atk_render_instructor_poi_places_tab() {
+	$path = '/assets/js/instructor-poi-places.js';
+	wp_enqueue_script( 'atk-instructor-poi-places', ATK_PLUGIN_URI . $path, array( 'atk-scripts-bundle' ), filemtime( ATK_PLUGIN_DIR . $path ), true );
+	wp_add_inline_script( 'atk-instructor-poi-places', atk_poi_script_config(), 'before' );
+	?>
+	<div id="atk-poi-admin-root"><p class="text-gray-600">Loading places of interest&hellip;</p></div>
+	<?php
+}

@@ -1801,3 +1801,21 @@ body.akn-app,body.akn-auth{min-height:100vh}
 	.atk-study-card:hover,.atk-course-card:hover{transform:none}
 	.form-control,.form-select{transition:none}
 }
+
+/* Places of Interest (dashboard): a ward heading carries a brand rule so the sections read as separate lists. */
+.akn-poi-ward-head{border-left:.25rem solid var(--akn-brand);padding-left:.75rem}
+
+/* Places table: fixed columns on wide screens so every ward lines up; stacked rows on phones. */
+@media (min-width:1200px){
+	.akn-poi-table{table-layout:fixed}
+	.akn-poi-table td,.akn-poi-table th{overflow-wrap:anywhere}
+	.akn-poi-table .akn-poi-actions{white-space:normal}
+}
+@media (max-width:991.98px){
+	.akn-poi-table colgroup,.akn-poi-table thead{display:none}
+	.akn-poi-table,.akn-poi-table tbody{display:block}
+	.akn-poi-table tr{display:flex;flex-wrap:wrap;align-items:center;gap:.5rem .75rem;padding:1rem 0;border-bottom:1px dashed var(--bs-border-color)}
+	.akn-poi-table td{display:block;padding:0;border:0;width:auto}
+	.akn-poi-table td.akn-poi-name{flex:1 0 100%}
+	.akn-poi-table td.akn-poi-actions{margin-left:auto}
+}

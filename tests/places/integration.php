@@ -227,6 +227,16 @@ $junk = it_dashboard( array( 'tab' => 'study-tools', 'tool' => 'nonsense' ) );
 t( 'an unknown tool falls back to Major Streets', strpos( $junk, 'name="roads_search"' ) !== false, true );
 
 
+/* ---- Task 7: Places of Interest screen ---- */
+$poi_html = it_dashboard( array( 'tab' => 'study-tools', 'tool' => 'poi' ) );
+t( 'the Places screen has its root element', strpos( $poi_html, 'id="atk-poi-admin-root"' ) !== false, true );
+t( 'the Places script is enqueued', wp_script_is( 'atk-instructor-poi-places', 'enqueued' ), true );
+$before = wp_scripts()->get_data( 'atk-instructor-poi-places', 'before' );
+$before = is_array( $before ) ? implode( '', $before ) : (string) $before;
+t( 'the config carries the REST address, a nonce and the categories', strpos( $before, 'var ATK_POI_ADMIN' ) !== false && strpos( $before, 'restUrl' ) !== false && strpos( $before, 'nonce' ) !== false && strpos( $before, 'Other Amenities' ) !== false, true );
+t( 'the Coming soon placeholder is gone', strpos( $poi_html, 'coming soon' ) === false, true );
+
+
 /* ---- end ---- */
 it_clean();
 wp_delete_user( $user_id );

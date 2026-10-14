@@ -627,11 +627,7 @@ function atk_render_instructor_study_tools_tab() {
 	</ul>
 	<?php
 	if ( 'poi' === $tool ) {
-		if ( function_exists( 'atk_render_instructor_poi_places_tab' ) ) {
-			atk_render_instructor_poi_places_tab();
-		} else {
-			echo '<div class="card"><div class="card-body text-gray-600">Places of Interest is coming soon.</div></div>';
-		}
+		atk_render_instructor_poi_places_tab();
 		return;
 	}
 	atk_render_instructor_roads_tab();
