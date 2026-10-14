@@ -134,6 +134,7 @@
 						"<div class=\"text-gray-600 fs-6\" id=\"atk-poi-summary\"></div>" +
 					"</div>" +
 					"<div class=\"card-toolbar flex-wrap gap-3\">" +
+						"<button type=\"button\" class=\"btn btn-light-warning d-none\" id=\"atk-poi-lookup-btn\" data-act=\"lookup-missing\"></button>" +
 						"<button type=\"button\" class=\"btn btn-light-primary\" id=\"atk-poi-import-btn\" data-act=\"import\">Import spreadsheet</button>" +
 						"<button type=\"button\" class=\"btn btn-primary\" data-act=\"add\">Add place</button>" +
 					"</div>" +
@@ -147,6 +148,7 @@
 							"<label class=\"form-check-label text-gray-700 fs-6\" for=\"atk-poi-flat\">Show as one list</label>" +
 						"</div>" +
 					"</div>" +
+					"<div id=\"atk-poi-lookup\" class=\"mb-6\"></div>" +
 					"<div id=\"atk-poi-list\"></div>" +
 				"</div>" +
 			"</div>" +
@@ -215,6 +217,22 @@
 				"<div class=\"modal-dialog modal-dialog-centered modal-dialog-scrollable modal-xl\"><div class=\"modal-content\" id=\"atk-poi-review-content\"></div></div>" +
 			"</div>" +
 
+			"<div class=\"modal fade\" id=\"atk-poi-pin-modal\" tabindex=\"-1\" aria-labelledby=\"atk-poi-pin-title\" aria-hidden=\"true\">" +
+				"<div class=\"modal-dialog modal-dialog-centered modal-lg\"><div class=\"modal-content\">" +
+					"<div class=\"modal-header\"><h3 class=\"modal-title\" id=\"atk-poi-pin-title\">Place the pin</h3>" +
+						"<button type=\"button\" class=\"btn-close\" data-bs-dismiss=\"modal\" aria-label=\"Close\"></button></div>" +
+					"<div class=\"modal-body\">" +
+						"<p class=\"text-gray-700 fs-6 mb-4\" id=\"atk-poi-pin-help\"></p>" +
+						"<div id=\"atk-poi-pin-map\" class=\"akn-poi-pin-map rounded\" role=\"application\" aria-label=\"Map. Click to place the pin.\"></div>" +
+						"<div id=\"atk-poi-pin-error\" class=\"text-danger fs-6 mt-3\" role=\"alert\"></div>" +
+					"</div>" +
+					"<div class=\"modal-footer\">" +
+						"<button type=\"button\" class=\"btn btn-light\" data-bs-dismiss=\"modal\">Cancel</button>" +
+						"<button type=\"button\" class=\"btn btn-primary\" id=\"atk-poi-pin-save\" disabled>Save pin</button>" +
+					"</div>" +
+				"</div></div>" +
+			"</div>" +
+
 			"<div class=\"modal fade\" id=\"atk-poi-delete-modal\" tabindex=\"-1\" aria-labelledby=\"atk-poi-delete-title\" aria-hidden=\"true\">" +
 				"<div class=\"modal-dialog modal-dialog-centered\"><div class=\"modal-content\">" +
 					"<div class=\"modal-header\"><h3 class=\"modal-title\" id=\"atk-poi-delete-title\">Delete this place?</h3>" +
@@ -240,6 +258,11 @@
 			}
 		}
 		$( "#atk-poi-summary" ).textContent = parts.join(", ");
+
+		var waiting = placesWaiting().length;
+		var lookupBtn = $( "#atk-poi-lookup-btn" );
+		lookupBtn.classList.toggle( "d-none", ! waiting || look.running );
+		lookupBtn.textContent = "Look up missing pins (" + waiting + ")";
 
 		var select = $( "#atk-poi-ward-filter" );
 		var options = [ "<option value=\"\">All wards</option>" ];
@@ -268,7 +291,7 @@
 			"<td>" + street + "</td>" +
 			( withWard ? "<td class=\"text-gray-700\">" + esc( item.ward ) + "</td>" : "" ) +
 			"<td class=\"d-none d-xl-table-cell\">" + badge( p.category, "info" ) + "</td>" +
-			"<td>" + pinBadge( p ) + "</td>" +
+			"<td><button type=\"button\" class=\"btn btn-sm p-0 border-0 bg-transparent\" data-act=\"pin\" data-id=\"" + p.id + "\" aria-label=\"Set the map pin for " + esc( p.name ) + "\">" + pinBadge( p ) + "</button></td>" +
 			"<td class=\"akn-poi-actions text-end text-nowrap\">" +
 				"<button type=\"button\" class=\"btn btn-sm btn-light-primary me-2\" data-act=\"edit\" data-id=\"" + p.id + "\" aria-label=\"Edit " + esc( p.name ) + "\">Edit</button>" +
 				"<button type=\"button\" class=\"btn btn-sm btn-light-danger\" data-act=\"delete\" data-id=\"" + p.id + "\" aria-label=\"Delete " + esc( p.name ) + "\">Delete</button>" +
@@ -428,6 +451,185 @@
 			modal( "atk-poi-delete-modal" ).hide();
 			fail( error );
 		} ).then( function () {
+			button.disabled = false;
+		} );
+	}
+
+	/* ---------- pin lookup (OpenStreetMap, one request a second) ---------- */
+
+	var GEO = window.ATK_POI_GEO;
+	var look = { running: false, stop: false, done: 0, total: 0, found: 0, missed: 0, note: "" };
+
+	function sleep( ms ) {
+		return new Promise( function ( resolve ) { window.setTimeout( resolve, ms ); } );
+	}
+
+	function placesWaiting() {
+		return allPlaces().map( function ( item ) { return item.place; } ).filter( function ( p ) {
+			return p.geo_state === "none";
+		} );
+	}
+
+	function renderLookup() {
+		var box = $( "#atk-poi-lookup" );
+		if ( ! look.running && ! look.note ) {
+			box.innerHTML = "";
+			return;
+		}
+		var pct = look.total ? Math.round( look.done / look.total * 100 ) : 0;
+		if ( look.running ) {
+			box.innerHTML =
+				"<div class=\"d-flex flex-wrap align-items-center gap-4 bg-light rounded p-5\">" +
+					"<div class=\"flex-grow-1\">" +
+						"<div class=\"fw-bold text-gray-900 mb-2\">Looking up map pins: " + look.done + " of " + look.total + "</div>" +
+						"<div class=\"progress h-8px\"><div class=\"progress-bar\" role=\"progressbar\" style=\"width:" + pct + "%\" aria-valuenow=\"" + pct + "\" aria-valuemin=\"0\" aria-valuemax=\"100\" aria-label=\"Pin lookup progress\"></div></div>" +
+						"<div class=\"fs-7 text-gray-600 mt-2\">" + look.found + " found, " + look.missed + " not found. One place a second, so you can keep working. Places not reached yet stay as they are.</div>" +
+					"</div>" +
+					"<button type=\"button\" class=\"btn btn-light\" data-act=\"lookup-stop\">Stop</button>" +
+				"</div>";
+			return;
+		}
+		box.innerHTML = "<div class=\"alert alert-" + ( look.error ? "warning" : "success" ) + " p-5 mb-0\" role=\"status\">" + esc( look.note ) + "</div>";
+	}
+
+	function postPin( id, lat, lng, stateName ) {
+		return api( "poi-places/" + id + "/pin", { method: "POST", body: { lat: lat, lng: lng, state: stateName } } );
+	}
+
+	/* Tries each search in turn and resolves with { lat, lng }, or null when nothing passes the rules. */
+	function lookupOne( place ) {
+		var queries = GEO.buildQueries( place );
+		var index = 0;
+		function next() {
+			if ( index >= queries.length ) {
+				return Promise.resolve( null );
+			}
+			var query = queries[ index++ ];
+			return fetch( GEO.searchUrl( query ), { headers: { Accept: "application/json" } } ).then( function ( response ) {
+				if ( ! response.ok ) {
+					throw new Error( "OpenStreetMap answered " + response.status + "." );
+				}
+				return response.json();
+			} ).then( function ( results ) {
+				var hit = GEO.pick( results );
+				if ( hit || index >= queries.length ) {
+					return hit;
+				}
+				return sleep( 1000 ).then( next );
+			} );
+		}
+		return next();
+	}
+
+	function lookupPins( places ) {
+		if ( look.running || ! GEO || ! places.length ) {
+			return Promise.resolve();
+		}
+		look = { running: true, stop: false, done: 0, total: places.length, found: 0, missed: 0, note: "", error: false };
+		renderLookup();
+		renderToolbarState();
+
+		function step( i ) {
+			if ( i >= places.length || look.stop ) {
+				return Promise.resolve();
+			}
+			var place = places[ i ];
+			return lookupOne( place ).then( function ( hit ) {
+				return hit ? postPin( place.id, hit.lat, hit.lng, "looked_up" ) : postPin( place.id, null, null, "not_found" );
+			} ).then( function ( saved ) {
+				look.done++;
+				if ( saved.geo_state === "not_found" ) {
+					look.missed++;
+				} else {
+					look.found++;
+				}
+				renderLookup();
+				return i + 1 < places.length && ! look.stop ? sleep( 1000 ).then( function () { return step( i + 1 ); } ) : null;
+			} );
+		}
+
+		return step( 0 ).catch( function ( error ) {
+			look.error = true;
+			look.failure = error && error.message ? error.message : "The lookup stopped.";
+		} ).then( function () {
+			var left = look.total - look.done;
+			var summary = look.found + " pins found, " + look.missed + " not found.";
+			look.note = look.error ?
+				"The lookup stopped. " + look.failure + " " + summary + " " + plural( left, "place is", "places are" ) + " still waiting. Use Look up missing pins to try again later." :
+				( look.stop ? "Lookup stopped. " + summary + " " + plural( left, "place is", "places are" ) + " still waiting." : "Lookup finished. " + summary + ( look.missed ? " Places that were not found can be placed by hand: click their pin badge." : "" ) );
+			look.running = false;
+			return reload().then( renderLookup );
+		} );
+	}
+
+	/* ---------- hand placement ---------- */
+
+	var picker = { map: null, marker: null, place: null, latlng: null };
+
+	function placePicker( latlng ) {
+		picker.latlng = latlng;
+		if ( picker.marker ) {
+			picker.marker.setLatLng( latlng );
+		} else {
+			picker.marker = window.L.circleMarker( latlng, { radius: 9, weight: 3, color: "#ffffff", fillColor: "#e8590c", fillOpacity: 1 } ).addTo( picker.map );
+		}
+		$( "#atk-poi-pin-save" ).disabled = false;
+	}
+
+	function openPinPicker( place ) {
+		if ( ! window.L ) {
+			fail( new Error( "The map did not load. Check your connection and try again." ) );
+			return;
+		}
+		picker.place = place;
+		$( "#atk-poi-pin-error" ).textContent = "";
+		$( "#atk-poi-pin-save" ).disabled = true;
+		$( "#atk-poi-pin-title" ).textContent = "Place the pin for " + place.name;
+		$( "#atk-poi-pin-help" ).textContent = ( place.address ? place.address + ". " : "" ) + "Click the map where the place is. The pin is saved as placed by hand and a later lookup will not move it.";
+		var el = document.getElementById( "atk-poi-pin-modal" );
+		el.addEventListener( "shown.bs.modal", function () {
+			var B = GEO.BOX;
+			if ( ! picker.map ) {
+				picker.map = window.L.map( "atk-poi-pin-map", { maxBounds: [ [ B.latMin, B.lngMin ], [ B.latMax, B.lngMax ] ], minZoom: 10 } );
+				window.L.tileLayer( "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+					maxZoom: 19,
+					attribution: "&copy; <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap</a> contributors"
+				} ).addTo( picker.map );
+				picker.map.on( "click", function ( event ) {
+					if ( GEO.inBox( event.latlng.lat, event.latlng.lng ) ) {
+						placePicker( event.latlng );
+					}
+				} );
+			}
+			picker.map.invalidateSize();
+			if ( picker.marker ) {
+				picker.marker.remove();
+				picker.marker = null;
+			}
+			if ( place.lat !== null ) {
+				picker.map.setView( [ place.lat, place.lng ], 17 );
+				placePicker( window.L.latLng( place.lat, place.lng ) );
+				$( "#atk-poi-pin-save" ).disabled = true;
+			} else {
+				picker.map.setView( [ 57.1497, -2.0943 ], 13 );
+			}
+		}, { once: true } );
+		modal( "atk-poi-pin-modal" ).show();
+	}
+
+	function savePin() {
+		if ( ! picker.place || ! picker.latlng ) {
+			return;
+		}
+		var button = $( "#atk-poi-pin-save" );
+		button.disabled = true;
+		postPin( picker.place.id, picker.latlng.lat, picker.latlng.lng, "manual" ).then( function ( saved ) {
+			modal( "atk-poi-pin-modal" ).hide();
+			return reload().then( function () {
+				flash( "Pin saved for " + saved.name + ".", "ok" );
+			} );
+		} ).catch( function ( error ) {
+			$( "#atk-poi-pin-error" ).textContent = error && error.message ? error.message : "That pin could not be saved.";
 			button.disabled = false;
 		} );
 	}
@@ -768,6 +970,15 @@
 			}
 		} else if ( act === "import" ) {
 			openImport();
+		} else if ( act === "pin" ) {
+			var pinned = findPlace( id );
+			if ( pinned ) {
+				openPinPicker( pinned );
+			}
+		} else if ( act === "lookup-missing" ) {
+			lookupPins( placesWaiting() );
+		} else if ( act === "lookup-stop" ) {
+			look.stop = true;
 		}
 	}
 
@@ -777,6 +988,7 @@
 		$( "#atk-poi-edit-form" ).addEventListener( "submit", saveEdit );
 		$( "#atk-poi-delete-confirm" ).addEventListener( "click", confirmDelete );
 		bindImport();
+		$( "#atk-poi-pin-save" ).addEventListener( "click", savePin );
 		$( "#atk-poi-search" ).addEventListener( "input", function ( event ) {
 			state.search = event.target.value;
 			renderList();
@@ -793,7 +1005,13 @@
 		window.ATK_POI_ADMIN_UI = window.ATK_POI_ADMIN_UI || {};
 		window.ATK_POI_ADMIN_UI.reload = reload;
 		window.ATK_POI_ADMIN_UI.escapeHtml = esc;
-		window.ATK_POI_ADMIN_UI.openPinPicker = window.ATK_POI_ADMIN_UI.openPinPicker || null;
+		window.ATK_POI_ADMIN_UI.openPinPicker = openPinPicker;
+		window.ATK_POI_ADMIN_UI.lookupPins = lookupPins;
+		window.ATK_POI_ADMIN_UI.afterCommit = function ( result ) {
+			if ( result && result.lookups && result.lookups.length ) {
+				lookupPins( result.lookups );
+			}
+		};
 		window.ATK_POI_ADMIN_UI.openImport = openImport;
 		window.ATK_POI_ADMIN_UI.flash = flash;
 		window.ATK_POI_ADMIN_UI.fail = fail;

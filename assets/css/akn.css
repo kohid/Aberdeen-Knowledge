@@ -1831,3 +1831,6 @@ body.akn-app,body.akn-auth{min-height:100vh}
 	.akn-poi-review tr{display:flex;flex-wrap:wrap;gap:.5rem 1rem;padding:1rem 0;border-bottom:1px dashed var(--bs-border-color)}
 	.akn-poi-review td{display:block;padding:0;border:0;min-width:0;flex:1 0 100%}
 }
+
+/* Places pin picker. */
+.akn-poi-pin-map{height:min(60vh,26rem);width:100%}

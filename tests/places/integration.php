@@ -263,6 +263,28 @@ $imp_again = it_rest( 'POST', 'poi-places/preview', array( 'rows' => $imp_sheet 
 t( 'a second preview of the same sheet is all updates, no new ward', array( $imp_again['counts']['update'], $imp_again['counts']['new_ward'] ), array( 2, 0 ) );
 
 
+/* ---- Task 9: pin states ---- */
+$pin_a = ATK_Poi_Store::save( array( 'name' => 'ZZ-IT Pin A', 'address' => '1 Rose street' ) );
+$pin_b = ATK_Poi_Store::save( array( 'name' => 'ZZ-IT Pin B', 'address' => '2 Rose street' ) );
+$nf = it_rest( 'POST', 'poi-places/' . $pin_a['id'] . '/pin', array( 'state' => 'not_found' ) );
+t( 'the pin route stores not_found with no coordinates', array( $nf->get_status(), $nf->get_data()['geo_state'], $nf->get_data()['lat'] ), array( 200, 'not_found', null ) );
+$lk = it_rest( 'POST', 'poi-places/' . $pin_b['id'] . '/pin', array( 'lat' => 57.14, 'lng' => -2.09, 'state' => 'looked_up' ) );
+t( 'the pin route stores looked_up', array( $lk->get_status(), $lk->get_data()['geo_state'] ), array( 200, 'looked_up' ) );
+$out = it_rest( 'POST', 'poi-places/' . $pin_b['id'] . '/pin', array( 'lat' => 0, 'lng' => 0, 'state' => 'looked_up' ) );
+t( 'an outside-box coordinate is a 400 and leaves the pin alone', array( $out->get_status(), ATK_Poi_Store::get( $pin_b['id'] )['lat'] ), array( 400, 57.14 ) );
+$waiting = array();
+foreach ( it_rest( 'GET', 'poi-places' )->get_data()['sections'] as $sec ) {
+	foreach ( $sec['places'] as $pl ) {
+		if ( 'none' === $pl['geo_state'] && 0 === strpos( $pl['name'], 'ZZ-IT Pin' ) ) {
+			$waiting[] = $pl['name'];
+		}
+	}
+}
+t( 'a not_found place is not waiting for a lookup', $waiting, array() );
+$bad_state = it_rest( 'POST', 'poi-places/' . $pin_b['id'] . '/pin', array( 'lat' => 57.14, 'lng' => -2.09, 'state' => 'bogus' ) );
+t( 'an unknown pin state is a 400', $bad_state->get_status(), 400 );
+
+
 /* ---- end ---- */
 it_clean();
 wp_delete_user( $user_id );

@@ -538,7 +538,9 @@ function atk_poi_script_config() {
 function atk_render_instructor_poi_places_tab() {
 	$path = '/assets/js/instructor-poi-places.js';
 	wp_enqueue_script( 'atk-nb-xlsx' ); // SheetJS, bundled (registered in inc/assets.php).
-	wp_enqueue_script( 'atk-instructor-poi-places', ATK_PLUGIN_URI . $path, array( 'atk-scripts-bundle', 'atk-nb-xlsx' ), filemtime( ATK_PLUGIN_DIR . $path ), true );
+	atk_enqueue_leaflet();
+	wp_enqueue_script( 'atk-poi-geo', ATK_PLUGIN_URI . '/assets/js/poi-geo.js', array(), filemtime( ATK_PLUGIN_DIR . '/assets/js/poi-geo.js' ), true );
+	wp_enqueue_script( 'atk-instructor-poi-places', ATK_PLUGIN_URI . $path, array( 'atk-scripts-bundle', 'atk-nb-xlsx', 'leaflet', 'atk-poi-geo' ), filemtime( ATK_PLUGIN_DIR . $path ), true );
 	wp_add_inline_script( 'atk-instructor-poi-places', atk_poi_script_config(), 'before' );
 	?>
 	<div id="atk-poi-admin-root"><p class="text-gray-600">Loading places of interest&hellip;</p></div>
