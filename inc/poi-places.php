@@ -345,3 +345,170 @@ class ATK_Poi_Store {
 		delete_transient( self::CACHE_KEY );
 	}
 }
+
+/* -------------------------------------------------------------------- */
+/* REST (atk/v1): instructors manage places, anyone reads the pinned ones */
+/* -------------------------------------------------------------------- */
+
+add_action( 'rest_api_init', 'atk_poi_register_routes' );
+function atk_poi_register_routes() {
+	$can = 'atk_nb_can_manage';
+
+	register_rest_route( 'atk/v1', '/poi-places', array(
+		array( 'methods' => 'GET', 'callback' => 'atk_poi_rest_list', 'permission_callback' => $can ),
+		array( 'methods' => 'POST', 'callback' => 'atk_poi_rest_save', 'permission_callback' => $can ),
+	) );
+	register_rest_route( 'atk/v1', '/poi-places/preview', array(
+		'methods' => 'POST', 'callback' => 'atk_poi_rest_preview', 'permission_callback' => $can,
+	) );
+	register_rest_route( 'atk/v1', '/poi-places/commit', array(
+		'methods' => 'POST', 'callback' => 'atk_poi_rest_commit', 'permission_callback' => $can,
+	) );
+	register_rest_route( 'atk/v1', '/poi-places/(?P<id>\d+)', array(
+		array( 'methods' => 'POST', 'callback' => 'atk_poi_rest_save', 'permission_callback' => $can ),
+		array( 'methods' => 'DELETE', 'callback' => 'atk_poi_rest_delete', 'permission_callback' => $can ),
+	) );
+	register_rest_route( 'atk/v1', '/poi-places/(?P<id>\d+)/pin', array(
+		'methods' => 'POST', 'callback' => 'atk_poi_rest_pin', 'permission_callback' => $can,
+	) );
+	register_rest_route( 'atk/v1', '/poi-venues', array(
+		'methods' => 'GET', 'callback' => 'atk_poi_rest_venues', 'permission_callback' => '__return_true',
+	) );
+}
+
+/** The list the dashboard screen draws: sections by ward plus what the filters and forms need. */
+function atk_poi_screen_data() {
+	$places = ATK_Poi_Store::all();
+	$pinned = 0;
+	foreach ( $places as $place ) {
+		if ( null !== $place['lat'] ) {
+			$pinned++;
+		}
+	}
+	$wards = array();
+	foreach ( ATK_Poi_Store::wards() as $id => $name ) {
+		$wards[] = array( 'id' => $id, 'name' => $name );
+	}
+	return array(
+		'sections'   => ATK_Poi_Store::sections(),
+		'wards'      => $wards,
+		'categories' => ATK_Poi_Planner::CATEGORIES,
+		'counts'     => array( 'total' => count( $places ), 'pinned' => $pinned, 'no_pin' => count( $places ) - $pinned ),
+	);
+}
+
+function atk_poi_rest_list() {
+	return rest_ensure_response( atk_poi_screen_data() );
+}
+
+/** Creates (no id) or updates (id in the route). Only the fields sent change. */
+function atk_poi_rest_save( WP_REST_Request $request ) {
+	$fields = array();
+	foreach ( array( 'name', 'postcode', 'street_answer', 'category', 'status' ) as $key ) {
+		if ( null !== $request->get_param( $key ) ) {
+			$fields[ $key ] = sanitize_text_field( (string) $request->get_param( $key ) );
+		}
+	}
+	foreach ( array( 'address', 'notes' ) as $key ) {
+		if ( null !== $request->get_param( $key ) ) {
+			$fields[ $key ] = sanitize_textarea_field( (string) $request->get_param( $key ) );
+		}
+	}
+	if ( null !== $request->get_param( 'ward_id' ) ) {
+		$fields['ward_id'] = (int) $request->get_param( 'ward_id' );
+	}
+	$saved = ATK_Poi_Store::save( $fields, (int) $request['id'] );
+	return is_wp_error( $saved ) ? $saved : rest_ensure_response( $saved );
+}
+
+function atk_poi_rest_delete( WP_REST_Request $request ) {
+	if ( ! ATK_Poi_Store::delete( (int) $request['id'] ) ) {
+		return new WP_Error( 'atk_poi_missing', 'That place no longer exists.', array( 'status' => 404 ) );
+	}
+	return rest_ensure_response( array( 'deleted' => true ) );
+}
+
+function atk_poi_rest_pin( WP_REST_Request $request ) {
+	$saved = ATK_Poi_Store::set_pin(
+		(int) $request['id'],
+		$request->get_param( 'lat' ),
+		$request->get_param( 'lng' ),
+		(string) $request->get_param( 'state' )
+	);
+	return is_wp_error( $saved ) ? $saved : rest_ensure_response( $saved );
+}
+
+function atk_poi_rest_preview( WP_REST_Request $request ) {
+	$input  = atk_poi_read_input( $request );
+	$rows   = $input['error'] ? array() : ATK_Poi_Store::plan_rows( $input['rows'] );
+	$counts = array( 'add' => 0, 'update' => 0, 'skip' => 0, 'needs_street' => 0, 'new_ward' => 0 );
+	foreach ( $rows as $row ) {
+		$counts[ $row['action'] ]++;
+		foreach ( array( 'needs_street', 'new_ward' ) as $issue ) {
+			if ( in_array( $issue, $row['issues'], true ) ) {
+				$counts[ $issue ]++;
+			}
+		}
+	}
+	return rest_ensure_response( array( 'error' => $input['error'], 'rows' => $rows, 'counts' => $counts ) );
+}
+
+function atk_poi_rest_commit( WP_REST_Request $request ) {
+	$input = atk_poi_read_input( $request );
+	if ( $input['error'] ) {
+		return new WP_Error( 'atk_poi_sheet', $input['error'], array( 'status' => 400 ) );
+	}
+	$create = array();
+	foreach ( array_slice( (array) $request->get_param( 'create_wards' ), 0, 5000 ) as $line ) {
+		$create[] = (int) $line;
+	}
+	$overrides = array();
+	$given     = $request->get_param( 'street_overrides' );
+	if ( is_array( $given ) ) {
+		foreach ( array_slice( $given, 0, 5000, true ) as $line => $street ) {
+			$overrides[ (int) $line ] = mb_substr( sanitize_text_field( is_scalar( $street ) ? (string) $street : '' ), 0, 255 );
+		}
+	}
+	return rest_ensure_response( ATK_Poi_Store::commit( $input['rows'], $create, $overrides ) );
+}
+
+/** Public: the pinned places for the map. Short cache so an import shows within a minute. */
+function atk_poi_rest_venues() {
+	$response = rest_ensure_response( array( 'venues' => ATK_Poi_Store::venues() ) );
+	$response->header( 'Cache-Control', 'public, max-age=60' );
+	return $response;
+}
+
+/**
+ * Turns the request into parsed place rows. Sheet rows arrive as arrays (capped at
+ * 5000 rows by 12 cells of 500 characters), pasted text as tab-separated lines.
+ *
+ * @return array{rows:array[],error:?string}
+ */
+function atk_poi_read_input( WP_REST_Request $request ) {
+	$raw = $request->get_param( 'rows' );
+	if ( is_array( $raw ) ) {
+		$table = array();
+		foreach ( array_slice( $raw, 0, 5000 ) as $row ) {
+			if ( ! is_array( $row ) ) {
+				continue;
+			}
+			$cells = array();
+			foreach ( array_slice( $row, 0, 12 ) as $cell ) {
+				$cells[] = mb_substr( is_scalar( $cell ) ? (string) $cell : '', 0, 500 );
+			}
+			$table[] = $cells;
+		}
+	} else {
+		$table = array();
+		$text  = mb_substr( (string) $request->get_param( 'text' ), 0, 400000 );
+		foreach ( array_slice( preg_split( '/\r\n|\r|\n/', $text ), 0, 5000 ) as $line ) {
+			$cells = array();
+			foreach ( array_slice( str_getcsv( $line, "\t", '"', '' ), 0, 12 ) as $cell ) {
+				$cells[] = mb_substr( (string) $cell, 0, 500 );
+			}
+			$table[] = $cells;
+		}
+	}
+	return ATK_Poi_Parser::parse_rows( $table );
+}

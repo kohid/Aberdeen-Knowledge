@@ -121,6 +121,89 @@ t( 'unpinned places stay off the map', in_array( 'ZZ-IT Alpha', $venue_names, tr
 t( 'repeated names get their postcode', in_array( 'ZZ-IT Twin (AB10 1AA)', $venue_names, true ) && in_array( 'ZZ-IT Twin (AB11 2BB)', $venue_names, true ), true );
 t( 'delete removes a place', ATK_Poi_Store::delete( $a['id'] ), true );
 
+/* ---- Task 5: REST routes ---- */
+function it_rest( $method, $route, array $params = array() ) {
+	$request = new WP_REST_Request( $method, '/atk/v1/' . $route );
+	foreach ( $params as $key => $value ) {
+		$request->set_param( $key, $value );
+	}
+	return rest_do_request( $request );
+}
+rest_get_server();
+
+wp_set_current_user( 0 );
+$anon = it_rest( 'GET', 'poi-places' );
+t( 'a logged-out visitor cannot read the places list', in_array( $anon->get_status(), array( 401, 403 ), true ), true );
+$anon_write = it_rest( 'POST', 'poi-places', array( 'name' => 'ZZ-IT Anon' ) );
+t( 'a logged-out visitor cannot create a place', in_array( $anon_write->get_status(), array( 401, 403 ), true ), true );
+$public = it_rest( 'GET', 'poi-venues' );
+t( 'the public venues route answers without login', $public->get_status(), 200 );
+$headers = $public->get_headers();
+t( 'the public venues route is cached for one minute', isset( $headers['Cache-Control'] ) ? $headers['Cache-Control'] : '', 'public, max-age=60' );
+t( 'the public venues route returns a venues list', is_array( $public->get_data()['venues'] ), true );
+wp_set_current_user( $user_id );
+
+$made = it_rest( 'POST', 'poi-places', array( 'name' => 'ZZ-IT Rest', 'address' => '1 Rose street, AB10 1AA', 'postcode' => 'ab10 1aa' ) );
+t( 'create answers 200 with the place', array( $made->get_status(), $made->get_data()['postcode'] ), array( 200, 'AB10 1AA' ) );
+$rid     = $made->get_data()['id'];
+$updated = it_rest( 'POST', 'poi-places/' . $rid, array( 'category' => 'Hotels', 'street_answer' => 'ROSE STREET' ) );
+t( 'update changes only what was sent', array( $updated->get_data()['category'], $updated->get_data()['name'] ), array( 'Hotels', 'ZZ-IT Rest' ) );
+$bad = it_rest( 'POST', 'poi-places', array( 'name' => '  ' ) );
+t( 'create without a name is a 400', $bad->get_status(), 400 );
+$missing = it_rest( 'POST', 'poi-places/99999999', array( 'name' => 'x' ) );
+t( 'updating a missing place is a 404', $missing->get_status(), 404 );
+
+$list = it_rest( 'GET', 'poi-places' );
+$data = $list->get_data();
+t( 'the list has sections, wards, categories and counts', array_keys( $data ), array( 'sections', 'wards', 'categories', 'counts' ) );
+t( 'counts add up', $data['counts']['total'], $data['counts']['pinned'] + $data['counts']['no_pin'] );
+t( 'the list offers eleven categories', count( $data['categories'] ), 11 );
+
+$pin = it_rest( 'POST', 'poi-places/' . $rid . '/pin', array( 'lat' => 57.15, 'lng' => -2.1, 'state' => 'looked_up' ) );
+t( 'pin stores a lookup result', array( $pin->get_status(), $pin->get_data()['geo_state'] ), array( 200, 'looked_up' ) );
+$far = it_rest( 'POST', 'poi-places/' . $rid . '/pin', array( 'lat' => 51.5, 'lng' => -0.12, 'state' => 'manual' ) );
+t( 'pin outside Aberdeen is a 400', $far->get_status(), 400 );
+$venues_after = it_rest( 'GET', 'poi-venues' )->get_data()['venues'];
+t( 'a pinned place shows on the public route', in_array( 'ZZ-IT Rest', array_column( $venues_after, 'name' ), true ), true );
+
+$sheet = array(
+	array( 'Place of interest', 'Street', 'Postcode', 'Ward' ),
+	array( '22 CLUB', '55 Rose street, AB10 1UB', 'AB10 1UB', '' ),
+	array( 'Babylon', '9 Alford Place, Aberdeen', 'AB10 1YD', '' ),
+	array( 'Aberdeen Blood Donor Centre', 'Foresterhill, AB25 2ZW', 'AB25 2ZW', '' ),
+);
+$preview = it_rest( 'POST', 'poi-places/preview', array( 'rows' => $sheet ) )->get_data();
+t( 'preview lists the three rows', count( $preview['rows'] ), 3 );
+t( 'preview counts add up', $preview['counts'], array( 'add' => 3, 'update' => 0, 'skip' => 0, 'needs_street' => 1, 'new_ward' => 0 ) );
+t( 'preview has no error', $preview['error'], null );
+$pasted = it_rest( 'POST', 'poi-places/preview', array( 'text' => "Place of interest\tStreet\tPostcode\tWard\nBabylon\t9 Alford Place\tAB10 1YD\t\n" ) )->get_data();
+t( 'pasted tab text is read the same way', count( $pasted['rows'] ), 1 );
+$noname = it_rest( 'POST', 'poi-places/preview', array( 'rows' => array( array( 'Foo', 'Bar' ), array( 'a', 'b' ) ) ) )->get_data();
+t( 'a sheet without a place column returns an error and no rows', array( $noname['error'], $noname['rows'] ), array( 'Could not find a "Place of interest" column.', array() ) );
+$huge = array( array( 'Place of interest', 'Street' ), array( str_repeat( 'x', 900 ), 'Rose street' ) );
+$cut  = it_rest( 'POST', 'poi-places/preview', array( 'rows' => $huge ) )->get_data();
+t( 'a very long cell is cut to 500 characters', mb_strlen( $cut['rows'][0]['name'] ), 500 );
+
+$commit_sheet = array(
+	array( 'Place of interest', 'Street', 'Postcode', 'Ward' ),
+	array( 'ZZ-IT Bare', 'Foresterhill, AB25 2ZW', 'AB25 2ZW', '' ),
+);
+$done = it_rest( 'POST', 'poi-places/commit', array( 'rows' => $commit_sheet, 'create_wards' => array(), 'street_overrides' => array( 2 => 'Typed Road' ) ) );
+t( 'commit adds the row', array( $done->get_status(), $done->get_data()['added'] ), array( 200, 1 ) );
+$bare = null;
+foreach ( ATK_Poi_Store::all() as $p ) {
+	if ( 'ZZ-IT Bare' === $p['name'] ) {
+		$bare = $p;
+	}
+}
+t( 'commit stores the street typed in the review', $bare ? $bare['street_answer'] : null, 'Typed Road' );
+
+$deleted = it_rest( 'DELETE', 'poi-places/' . $rid );
+t( 'delete answers deleted true', array( $deleted->get_status(), $deleted->get_data() ), array( 200, array( 'deleted' => true ) ) );
+$gone = it_rest( 'DELETE', 'poi-places/' . $rid );
+t( 'deleting again is a 404', $gone->get_status(), 404 );
+
+
 /* ---- end ---- */
 it_clean();
 wp_delete_user( $user_id );
