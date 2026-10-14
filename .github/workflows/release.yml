@@ -1,0 +1,31 @@
+name: Release
+
+# Push a tag like v1.0.1 to publish a release. The tag must equal the Version
+# line in aberdeen-knowledge.php, so a release can never ship the wrong number.
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check the tag matches the plugin version
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          VERSION=$(grep -m1 -E '^[[:space:]]*\*[[:space:]]*Version:' aberdeen-knowledge.php | sed -E 's/.*Version:[[:space:]]*//; s/[[:space:]]*$//')
+          CONSTANT=$(grep -m1 -E "define\( 'ATK_VERSION'" aberdeen-knowledge.php | sed -E "s/.*'ATK_VERSION', *'([^']+)'.*/\1/")
+          echo "tag=$TAG header=$VERSION constant=$CONSTANT"
+          test "$TAG" = "$VERSION" || { echo "Tag $TAG does not match the plugin Version $VERSION"; exit 1; }
+          test "$TAG" = "$CONSTANT" || { echo "Tag $TAG does not match ATK_VERSION $CONSTANT"; exit 1; }
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" --title "Aberdeen Knowledge $GITHUB_REF_NAME" --generate-notes

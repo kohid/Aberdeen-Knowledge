@@ -49,6 +49,22 @@ frontend-design for every visual or UI decision (inside the design rules below).
   same kind of explicit ask.
 - Modal conventions: use `modal-dialog-scrollable` only when content can actually grow long.
 
+## Stylesheet notes (`assets/css/akn.css`)
+
+- Spacing is N x 0.25rem for N 0 to 20 (replaces Bootstrap's 0 to 5 steps); `fw-bold` is 500, `fw-bolder` 600,
+  `fw-boldest` 700; `fs-1` to `fs-9` is our own scale (24px down to 11px). Markup relies on these, so do not "fix" them to
+  Bootstrap's values.
+- Tones: `.badge-light-*`, `.btn-light-*`, `.bg-light-*` read one set of `--akn-t-*` variables set by the tone class.
+  Text colours for brand and status use the "ink" shade (readable on the surface in both modes), fills use the real colour.
+- Checkboxes and radios are the browser's own control with `accent-color`, so the tick stays readable on any brand colour.
+- Select2 is skinned in akn.css (`html .select2-...` selectors so they win whatever the load order); no Select2 theme file.
+- Base-theme guard: Hello Elementor (the site's base theme) restyles every `button`, `[type=button]`, text input, table
+  and link inside `.page-content` with selectors that beat Bootstrap's single classes. akn.css restates the essentials
+  with `button.btn`, `input.form-control`, `table.table > ...` and `a.btn` selectors, and our stylesheet is enqueued at
+  priority 20 so it prints after the theme's. When adding a component, check it on Hello Elementor (compile its
+  `dev/scss` from github.com/elementor/hello-theme to test) before trusting a plain Bootstrap class.
+- `body.akn-app` (managed pages) and `body.akn-auth` carry the grey page canvas; other site pages keep their background.
+
 ## Commands
 
 There is no build step or package manager in this repository. Verify changes with:
