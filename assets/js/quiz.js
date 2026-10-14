@@ -697,7 +697,9 @@
 		} );
 	}
 
-	startBtn.addEventListener( "click", start );
+	if ( startBtn ) {
+		startBtn.addEventListener( "click", start );
+	}
 	retryBtn.addEventListener( "click", function () {
 		resultsEl.classList.add( "d-none" );
 		start();

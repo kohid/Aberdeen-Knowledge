@@ -312,12 +312,20 @@ function atk_street_test_questions() {
 	}, $rows );
 }
 
+/**
+ * The mockup POI test's question bank: every current place an instructor has
+ * saved under Study Tools > Places of Interest that has a street answer. The
+ * answer is the place's street. The older typed questions
+ * (quiz_poi_questions) stay in the database but are no longer read.
+ */
 function atk_poi_test_questions() {
-	global $wpdb;
-	$rows = $wpdb->get_results( 'SELECT poi, accepted FROM ' . atk_table( 'quiz_poi_questions' ) . ' ORDER BY sort_order ASC, id ASC' );
-	return array_map( function ( $row ) {
-		return array( 'poi' => $row->poi, 'accepted' => json_decode( $row->accepted, true ) );
-	}, $rows );
+	$questions = array();
+	foreach ( ATK_Poi_Store::all() as $place ) {
+		if ( 'current' === $place['status'] && '' !== $place['street_answer'] ) {
+			$questions[] = array( 'poi' => $place['name'], 'accepted' => array( $place['street_answer'] ) );
+		}
+	}
+	return $questions;
 }
 
 function atk_route_test_questions() {

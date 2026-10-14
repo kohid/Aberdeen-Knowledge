@@ -350,6 +350,33 @@ class ATK_Poi_Store {
 		return $venues;
 	}
 
+	/**
+	 * For the Course Builder: the places in each week's wards, by week id, so the
+	 * POI question form can offer them. Only weeks whose wards hold places appear.
+	 *
+	 * @param array[] $weeks Output of atk_course_weeks().
+	 * @return array<int,array<int,array{name:string,street:string}>>
+	 */
+	public static function week_places( array $weeks ) {
+		$by_ward = array();
+		foreach ( self::all() as $place ) {
+			$by_ward[ $place['ward_id'] ][] = array( 'name' => $place['name'], 'street' => $place['street_answer'] );
+		}
+		$out = array();
+		foreach ( $weeks as $week ) {
+			$list = array();
+			foreach ( ATK_Nb_Store::ids_in_text( implode( ', ', $week['neighbourhoods'] ) ) as $ward_id ) {
+				if ( ! empty( $by_ward[ $ward_id ] ) ) {
+					$list = array_merge( $list, $by_ward[ $ward_id ] );
+				}
+			}
+			if ( $list ) {
+				$out[ (int) $week['id'] ] = $list;
+			}
+		}
+		return $out;
+	}
+
 	public static function flush_cache() {
 		delete_transient( self::CACHE_KEY );
 	}

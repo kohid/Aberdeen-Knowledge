@@ -697,7 +697,7 @@ function atk_nb_week_street_map( array $weeks ) {
 }
 
 /** Loads the Course Builder helper script once, with the REST address and each week's streets. */
-function atk_nb_enqueue_course_builder( array $week_streets ) {
+function atk_nb_enqueue_course_builder( array $week_streets, array $week_places = array(), array $places = array() ) {
 	$path = '/assets/js/instructor-course-neighbourhoods.js';
 	wp_enqueue_script( 'atk-instructor-course-neighbourhoods', ATK_PLUGIN_URI . $path, array( 'atk-scripts-bundle', 'atk-instructor-dashboard' ), filemtime( ATK_PLUGIN_DIR . $path ), true );
 	wp_add_inline_script(
@@ -706,6 +706,8 @@ function atk_nb_enqueue_course_builder( array $week_streets ) {
 			'restUrl'     => esc_url_raw( rest_url( 'atk/v1/' ) ),
 			'nonce'       => wp_create_nonce( 'wp_rest' ),
 			'weekStreets' => (object) $week_streets,
+			'weekPlaces'  => (object) $week_places,
+			'places'      => array_values( $places ),
 		) ) . ';',
 		'before'
 	);

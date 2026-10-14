@@ -151,23 +151,15 @@ function atk_instructor_known_road_names() {
 }
 
 /**
- * Every POI name already used across the Course and mockup POI question
- * banks. Unlike roads/neighbourhoods there's no independent master list of
- * Aberdeen POIs to seed from, so suggestions grow organically from whatever
- * instructors have already entered.
+ * The names of the places saved under Study Tools > Places of Interest, for the
+ * Course Builder's POI question picker.
  */
 function atk_instructor_known_poi_names() {
-	global $wpdb;
-	$seen = array();
-	foreach ( array( atk_table( 'course_poi_questions' ), atk_table( 'quiz_poi_questions' ) ) as $table ) {
-		foreach ( $wpdb->get_col( "SELECT poi FROM $table" ) as $poi ) {
-			$poi = trim( (string) $poi );
-			if ( '' !== $poi ) {
-				$seen[ $poi ] = true;
-			}
-		}
+	$names = array();
+	foreach ( ATK_Poi_Store::all() as $place ) {
+		$names[ $place['name'] ] = true;
 	}
-	$list = array_keys( $seen );
+	$list = array_keys( $names );
 	sort( $list, SORT_STRING | SORT_FLAG_CASE );
 	return $list;
 }
@@ -835,7 +827,14 @@ function atk_render_instructor_course_tab() {
 	$type  = isset( $_GET['type'] ) ? atk_course_type_or_default( sanitize_key( $_GET['type'] ) ) : 'street';
 	$weeks = atk_course_weeks( $type );
 	$price = atk_course_get_price( $type );
-	atk_nb_enqueue_course_builder( 'street' === $type ? atk_nb_week_street_map( $weeks ) : array() );
+	if ( 'poi' === $type ) {
+		$all_places = array_map( function ( $p ) {
+			return array( 'name' => $p['name'], 'street' => $p['street_answer'] );
+		}, ATK_Poi_Store::all() );
+		atk_nb_enqueue_course_builder( array(), ATK_Poi_Store::week_places( $weeks ), $all_places );
+	} else {
+		atk_nb_enqueue_course_builder( 'street' === $type ? atk_nb_week_street_map( $weeks ) : array() );
+	}
 	?>
 	<ul class="nav nav-pills mb-6">
 		<?php foreach ( $types as $tkey => $tinfo ) : ?>
@@ -1071,7 +1070,13 @@ function atk_render_instructor_course_modals( $type ) {
 							<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
 						</div>
 						<div class="modal-body">
-							<div class="mb-4"><label class="form-label">Point of Interest</label><?php echo atk_render_single_select( 'atk-cq-poi-poi', 'poi', atk_instructor_known_poi_names() ); ?></div>
+							<div class="d-none mb-5" id="atk-cq-place-wrap">
+								<div class="form-check form-switch form-check-custom form-check-solid">
+									<input class="form-check-input" type="checkbox" id="atk-cq-place-only" />
+									<label class="form-check-label fw-semibold" for="atk-cq-place-only">Only places in this week's wards <span class="text-gray-600" id="atk-cq-place-count"></span></label>
+								</div>
+							</div>
+							<div class="mb-4"><label class="form-label">Point of Interest</label><?php echo atk_render_single_select( 'atk-cq-poi-poi', 'poi', atk_instructor_known_poi_names() ); ?><div class="form-text">Pick a saved place and its street fills in below. <a href="<?php echo esc_url( add_query_arg( array( 'tab' => 'study-tools', 'tool' => 'poi' ), atk_get_page_url( 'instructor-dashboard' ) ) ); ?>">Manage places</a></div></div>
 							<div class="mb-2"><label class="form-label">Accepted Answers</label><?php echo atk_render_tag_select( 'atk-cq-poi-accepted', 'accepted', atk_instructor_known_road_names() ); ?></div>
 						</div>
 						<div class="modal-footer">
@@ -1243,72 +1248,22 @@ function atk_render_instructor_street_questions() {
 }
 
 function atk_render_instructor_poi_questions() {
-	$questions = atk_poi_test_questions_with_ids();
+	$count   = count( atk_poi_test_questions() );
+	$places  = count( ATK_Poi_Store::all() );
+	$url     = add_query_arg( array( 'tab' => 'study-tools', 'tool' => 'poi' ), atk_get_page_url( 'instructor-dashboard' ) );
 	?>
-
-		<?php
-		$poi_lines = array();
-		foreach ( $questions as $q ) {
-			$poi_lines[] = $q['poi'] . ' | ' . implode( ', ', $q['accepted'] );
-		}
-		?>
-		<div class="card mb-6">
-			<div class="card-header">
-				<h3 class="card-title">Edit as list</h3>
-				<div class="card-toolbar"><span class="badge badge-light-primary" id="atk-poi-bulk-count"><?php echo esc_html( count( $poi_lines ) ); ?> questions</span></div>
-			</div>
-			<form method="post" action="<?php echo esc_url( admin_url( 'admin-ajax.php' ) ); ?>" id="atk-poi-bulk-form" data-existing="<?php echo esc_attr( count( $poi_lines ) ); ?>">
-				<input type="hidden" name="action" value="atk_instructor_bulk_save_poi_questions" />
-				<?php wp_nonce_field( ATK_INSTRUCTOR_NONCE_ACTION, 'atk_nonce' ); ?>
-				<div class="card-body">
-					<textarea name="poi_list" id="atk-poi-bulk-text" class="form-control form-control-solid font-monospace fs-7" rows="12" spellcheck="false" wrap="off"><?php echo esc_textarea( implode( "\n", $poi_lines ) ); ?></textarea>
-					<div class="form-text mt-3">One question per line: <code>Point of Interest | accepted answer 1, accepted answer 2</code>. Saving updates existing places (matched by name), adds new ones, and <strong>removes any place no longer listed</strong>. Line order is the question order.</div>
-				</div>
-				<div class="card-footer d-flex justify-content-end">
-					<button type="submit" class="btn btn-primary">Save list</button>
-				</div>
-			</form>
-		</div>
 	<div class="card">
-		<div class="card-body">
-			<button type="button" class="btn btn-primary mb-6" data-bs-toggle="modal" data-bs-target="#atk-poi-modal" onclick="atkResetQuizModal('poi')"><i class="bi bi-plus-lg me-1"></i>Add POI Question</button>
-			<div class="table-responsive">
-				<table class="table table-row-dashed align-middle">
-					<thead><tr class="text-gray-500 fs-7 text-uppercase"><th>Point of Interest</th><th>Accepted</th><th class="text-end">Actions</th></tr></thead>
-					<tbody>
-						<?php foreach ( $questions as $q ) : ?>
-							<tr>
-								<td><?php echo esc_html( $q['poi'] ); ?></td>
-								<td><?php echo esc_html( implode( ', ', $q['accepted'] ) ); ?></td>
-								<td class="text-end">
-									<button type="button" class="btn btn-sm btn-icon btn-light-primary atk-edit-poi-question"
-										data-id="<?php echo esc_attr( $q['id'] ); ?>" data-poi="<?php echo esc_attr( $q['poi'] ); ?>" data-accepted="<?php echo esc_attr( implode( ', ', $q['accepted'] ) ); ?>"><i class="bi bi-pencil"></i></button>
-									<?php echo atk_instructor_delete_quiz_form( 'poi', $q['id'] ); ?>
-								</td>
-							</tr>
-						<?php endforeach; ?>
-					</tbody>
-				</table>
-			</div>
-		</div>
-	</div>
-
-	<div class="modal fade" id="atk-poi-modal" tabindex="-1" aria-hidden="true">
-		<div class="modal-dialog modal-dialog-centered">
-			<div class="modal-content">
-				<form method="post" action="<?php echo esc_url( admin_url( 'admin-ajax.php' ) ); ?>">
-					<input type="hidden" name="action" value="atk_instructor_save_quiz_question" />
-					<input type="hidden" name="qtype" value="poi" />
-					<input type="hidden" name="question_id" id="atk-poi-id" value="" />
-					<?php wp_nonce_field( ATK_INSTRUCTOR_NONCE_ACTION, 'atk_nonce' ); ?>
-					<div class="modal-header"><h3 class="modal-title">POI Test Question</h3><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div>
-					<div class="modal-body">
-						<div class="mb-4"><label class="form-label">Point of Interest</label><input type="text" name="poi" id="atk-poi-poi" class="form-control" required /></div>
-						<div class="mb-2"><label class="form-label">Accepted Answers</label><?php echo atk_render_tag_select( 'atk-poi-accepted', 'accepted', atk_instructor_known_road_names() ); ?></div>
-					</div>
-					<div class="modal-footer"><button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button><button type="submit" class="btn btn-primary">Save</button></div>
-				</form>
-			</div>
+		<div class="card-body d-flex flex-column align-items-center text-center py-12">
+			<h3 class="fw-bold text-gray-900">The POI test now draws from Places of Interest</h3>
+			<p class="text-gray-600 fs-6 mw-450px">
+				<?php if ( $places ) : ?>
+					<?php echo esc_html( sprintf( '%d of the %d saved places are ready as POI test questions (current, with a street answer).', $count, $places ) ); ?>
+				<?php else : ?>
+					No places have been imported yet. Import the official spreadsheet and the POI test is filled from it.
+				<?php endif; ?>
+				Add, edit or import places under Study Tools.
+			</p>
+			<a class="btn btn-primary" href="<?php echo esc_url( $url ); ?>">Open Places of Interest</a>
 		</div>
 	</div>
 	<?php

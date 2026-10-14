@@ -314,6 +314,46 @@ t( 'the map script reads the REST route', strpos( $src, "rest_url( 'atk/v1/poi-v
 t( 'the old data files are gone', array( file_exists( ATK_PLUGIN_DIR . '/assets/data/poi.json' ), file_exists( ATK_PLUGIN_DIR . '/assets/data/poi-source.csv' ) ), array( false, false ) );
 
 
+/* ---- Task 11: tests and Course Builder use the places ---- */
+it_clean();
+ob_start();
+atk_render_quiz( 'poi' );
+$empty_quiz = ob_get_clean();
+t( 'the POI test with no places says so and has no Start button', strpos( $empty_quiz, 'once an instructor imports them' ) !== false && strpos( $empty_quiz, 'id="atk-quiz-start"' ) === false, true );
+$cache11 = null;
+$wa = ATK_Nb_Store::ensure_neighbourhood( 'ZZ-IT Ward A', $cache11 )[0];
+$wb = ATK_Nb_Store::ensure_neighbourhood( 'ZZ-IT Ward B', $cache11 )[0];
+ATK_Poi_Store::save( array( 'name' => 'ZZ-IT Q Good', 'street_answer' => 'ROSE STREET', 'ward_id' => $wa ) );
+ATK_Poi_Store::save( array( 'name' => 'ZZ-IT Q No Street', 'street_answer' => '', 'ward_id' => $wa ) );
+ATK_Poi_Store::save( array( 'name' => 'ZZ-IT Q Closed', 'street_answer' => 'KING STREET', 'status' => 'closed', 'ward_id' => $wb ) );
+ATK_Poi_Store::save( array( 'name' => 'ZZ-IT Q Other Ward', 'street_answer' => 'UNION STREET', 'ward_id' => $wb ) );
+$qs = array_values( array_filter( atk_poi_test_questions(), function ( $q ) { return 0 === strpos( $q['poi'], 'ZZ-IT ' ); } ) );
+$qnames = array_column( $qs, 'poi' );
+t( 'test questions use only current places with a street answer', $qnames, array( 'ZZ-IT Q Good', 'ZZ-IT Q Other Ward' ) );
+t( 'accepted holds exactly the street answer', $qs[0]['accepted'], array( 'ROSE STREET' ) );
+t( 'the old typed questions no longer feed the test', in_array( 'Marischal College', array_column( atk_poi_test_questions(), 'poi' ), true ), false );
+$known = atk_instructor_known_poi_names();
+t( 'known POI names are the saved places', array( in_array( 'ZZ-IT Q Good', $known, true ), in_array( 'Marischal College', $known, true ) ), array( true, false ) );
+$wp = ATK_Poi_Store::week_places( array(
+	array( 'id' => 901, 'neighbourhoods' => array( 'ZZ-IT Ward A' ) ),
+	array( 'id' => 902, 'neighbourhoods' => array( 'ZZ-IT Ward A', 'ZZ-IT Ward B' ) ),
+	array( 'id' => 903, 'neighbourhoods' => array( 'No Such Ward' ) ),
+) );
+t( 'week_places lists only that week\'s ward places', array_column( $wp[901], 'name' ), array( 'ZZ-IT Q Good', 'ZZ-IT Q No Street' ) );
+t( 'a week with two wards gets both wards\' places', count( $wp[902] ), 4 );
+t( 'a week whose ward holds nothing is left out', isset( $wp[903] ), false );
+t( 'week_places carries the street', $wp[901][0]['street'], 'ROSE STREET' );
+ob_start();
+atk_render_instructor_poi_questions();
+$bank = ob_get_clean();
+ob_start();
+atk_render_quiz( 'poi' );
+$some_quiz = ob_get_clean();
+t( 'the intro never promises more questions than the bank holds', strpos( $some_quiz, '2 questions' ) !== false, true );
+t( 'the Question Bank POI tab links to Study Tools', strpos( $bank, 'tool=poi' ) !== false, true );
+t( 'the old typed question list and bulk editor are gone from the page', strpos( $bank, 'atk-poi-bulk-form' ) === false && strpos( $bank, 'atk-poi-modal' ) === false, true );
+
+
 /* ---- end ---- */
 it_clean();
 wp_delete_user( $user_id );

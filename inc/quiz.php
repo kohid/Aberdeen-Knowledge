@@ -141,6 +141,8 @@ function atk_render_quiz( $key, $test = null, $questions = null, $extra = array(
 
 	$is_study        = ! empty( $test['instantFeedback'] );
 	$question_count  = isset( $test['sessionSize'] ) ? (int) $test['sessionSize'] : ATK_QUIZ_QUESTION_COUNT;
+	// A bank smaller than a full session (a new site with few places, say) never promises more questions than it has.
+	$question_count  = min( $question_count, count( $questions ) );
 	$hub_key         = isset( $test['hub_key'] ) ? $test['hub_key'] : 'study-tools';
 	$hub_label       = isset( $test['hub_label'] ) ? $test['hub_label'] : 'Back to Study Tools';
 	?>
@@ -157,8 +159,12 @@ function atk_render_quiz( $key, $test = null, $questions = null, $extra = array(
 				<div class="card-body text-center py-15">
 					<h1 class="fs-2x fw-bolder text-gray-900 mb-3"><?php echo esc_html( $test['title'] ); ?></h1>
 					<p class="fs-5 text-gray-600 mb-2"><?php echo esc_html( $test['instruction'] ); ?></p>
-					<p class="fs-6 text-gray-500 mb-8"><?php echo esc_html( $question_count ); ?> questions &middot; <?php echo esc_html( ATK_QUIZ_MINUTES ); ?> minutes</p>
-					<button type="button" class="btn btn-lg btn-primary" id="atk-quiz-start"><?php echo $is_study ? 'Start Studying' : 'Start Test'; ?></button>
+					<?php if ( $questions ) : ?>
+						<p class="fs-6 text-gray-500 mb-8"><?php echo esc_html( $question_count ); ?> questions &middot; <?php echo esc_html( ATK_QUIZ_MINUTES ); ?> minutes</p>
+						<button type="button" class="btn btn-lg btn-primary" id="atk-quiz-start"><?php echo $is_study ? 'Start Studying' : 'Start Test'; ?></button>
+					<?php else : ?>
+						<p class="fs-6 text-gray-600 mb-0" id="atk-quiz-empty" role="status"><?php echo 'poi' === $key ? 'Places of interest will appear here once an instructor imports them.' : 'There are no questions in this test yet.'; ?></p>
+					<?php endif; ?>
 				</div>
 			</div>
 

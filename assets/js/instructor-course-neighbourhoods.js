@@ -8,7 +8,12 @@
  *    the streets of the week's neighbourhoods. The fields stay Select2 with
  *    tags:true, so a street outside the list can still be typed.
  *
- * Reads ATK_NB_COURSE: { restUrl, nonce, weekStreets: { weekId: [names] } }.
+ * 3. In the POI question form, a place picker fed by the saved Places of
+ *    Interest: choosing one fills Accepted Answers with its street, and a switch
+ *    narrows the list to the places in the week's wards.
+ *
+ * Reads ATK_NB_COURSE: { restUrl, nonce, weekStreets: { weekId: [names] },
+ * weekPlaces: { weekId: [{name, street}] }, places: [{name, street}] }.
  */
 ( function () {
 	"use strict";
@@ -68,6 +73,77 @@
 	$( "[data-atk-nb-summary]" ).each( function () {
 		watchSummary( $( this ) );
 	} );
+
+	/* ------------------------------------------------------------------ */
+	/* POI question form: pick a saved place                                */
+	/* ------------------------------------------------------------------ */
+
+	var $placeWrap = $( "#atk-cq-place-wrap" );
+	if ( $placeWrap.length ) {
+		( function () {
+			var $poi = $( "#atk-cq-poi-poi" );
+			var $accepted = $( "#atk-cq-poi-accepted" );
+			var $placeOnly = $( "#atk-cq-place-only" );
+			var $placeCount = $( "#atk-cq-place-count" );
+			var originalPoi = $poi.html();
+			var streets = {};
+			var weekPlaces = [];
+
+			( cfg.places || [] ).forEach( function ( place ) {
+				streets[ place.name ] = place.street || "";
+			} );
+
+			function applyPlaces() {
+				var current = $poi.val() || "";
+				if ( weekPlaces.length && $placeOnly.is( ":checked" ) ) {
+					var seen = {};
+					$poi.empty().append( new Option( "", "", false, false ) );
+					weekPlaces.forEach( function ( place ) {
+						if ( ! seen[ place.name ] ) {
+							seen[ place.name ] = true;
+							$poi.append( new Option( place.name, place.name, false, false ) );
+						}
+					} );
+					if ( current && ! seen[ current ] ) {
+						$poi.append( new Option( current, current, false, false ) );
+					}
+				} else {
+					$poi.html( originalPoi );
+					if ( current && ! $poi.find( "option" ).filter( function () { return this.value === current; } ).length ) {
+						$poi.append( new Option( current, current, false, false ) );
+					}
+				}
+				$poi.val( current ).trigger( "change.select2" );
+			}
+
+			function openForPlaces( weekId ) {
+				weekPlaces = ( cfg.weekPlaces && cfg.weekPlaces[ weekId ] ) || [];
+				if ( weekPlaces.length ) {
+					$placeCount.text( "(" + weekPlaces.length + ")" );
+					$placeWrap.removeClass( "d-none" );
+					$placeOnly.prop( "checked", true );
+				} else {
+					$placeWrap.addClass( "d-none" );
+					$placeOnly.prop( "checked", false );
+				}
+				applyPlaces();
+			}
+
+			// Only a person's own choice fills Accepted Answers: select2:select does not fire when the
+			// dashboard script sets the values to edit an existing question.
+			$poi.on( "select2:select", function ( event ) {
+				var street = streets[ event.params.data.id ];
+				if ( street ) {
+					$accepted.empty().append( new Option( street, street, true, true ) ).trigger( "change" );
+				}
+			} );
+			$placeOnly.on( "change", applyPlaces );
+			$( document ).on( "click", ".atk-add-course-question, .atk-edit-course-poi-question", function () {
+				var weekId = String( $( this ).data( "week-id" ) );
+				window.setTimeout( function () { openForPlaces( weekId ); }, 0 );
+			} );
+		}() );
+	}
 
 	/* ------------------------------------------------------------------ */
 	/* Narrow Road A / Road B to the week's streets                        */
