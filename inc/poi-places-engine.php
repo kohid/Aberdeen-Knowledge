@@ -199,3 +199,162 @@ class ATK_Poi_Street_Matcher {
 		return array( 'status' => 'unmatched', 'road' => null, 'suggestion' => $suggestion );
 	}
 }
+
+/**
+ * Works out what an import would change, without touching the database.
+ * Pure PHP: the store hands it plain arrays, so every rule here can be tested.
+ */
+class ATK_Poi_Planner {
+
+	const CATEGORIES = array(
+		'Restaurants and Cafes',
+		'Hotels',
+		'Museums Arts & Culture',
+		'Sports Facilities',
+		'Schools Libraries & Learning',
+		'Community Centres',
+		'Religious Buildings & Cemeteries',
+		'Clubs & Members Clubs',
+		'Other Amenities',
+		'Living Spaces',
+		'Transport Hubs',
+	);
+
+	const DEFAULT_CATEGORY = 'Other Amenities';
+
+	/** The same place is the same name (any case) at the same postcode. */
+	public static function place_key( $name, $postcode ) {
+		return mb_strtolower( trim( (string) $name ), 'UTF-8' ) . '|' . ATK_Poi_Parser::tidy_postcode( $postcode );
+	}
+
+	private static function category_of( $text ) {
+		$text = mb_strtolower( trim( (string) $text ), 'UTF-8' );
+		foreach ( self::CATEGORIES as $category ) {
+			if ( mb_strtolower( $category, 'UTF-8' ) === $text ) {
+				return $category;
+			}
+		}
+		return self::DEFAULT_CATEGORY;
+	}
+
+	/**
+	 * @param array[] $rows Output of ATK_Poi_Parser::parse_rows()['rows'].
+	 * @param array   $ctx  wards (id => name), existing (id, name, postcode, street_answer), roads (names).
+	 * @return array[] One plan row per input row.
+	 */
+	public static function plan( array $rows, array $ctx ) {
+		$wards = array();
+		foreach ( $ctx['wards'] as $id => $name ) {
+			$wards[ ATK_Poi_Parser::ward_key( $name ) ] = (int) $id;
+		}
+		$existing = array();
+		foreach ( $ctx['existing'] as $place ) {
+			$existing[ self::place_key( $place['name'], $place['postcode'] ) ] = $place;
+		}
+		$matcher = new ATK_Poi_Street_Matcher( $ctx['roads'] );
+		$seen    = array();
+		$out     = array();
+
+		foreach ( $rows as $row ) {
+			$key    = self::place_key( $row['name'], $row['postcode'] );
+			$street = $matcher->match( $row['address'] );
+			$known  = isset( $existing[ $key ] ) ? $existing[ $key ] : null;
+
+			$action = 'add';
+			if ( isset( $seen[ $key ] ) ) {
+				$action = 'skip';
+			} elseif ( $known ) {
+				$action = 'update';
+			}
+			$seen[ $key ] = true;
+
+			$issues = array();
+			if ( '' === trim( $row['ward'] ) ) {
+				$ward_id = 0;
+			} elseif ( isset( $wards[ ATK_Poi_Parser::ward_key( $row['ward'] ) ] ) ) {
+				$ward_id = $wards[ ATK_Poi_Parser::ward_key( $row['ward'] ) ];
+			} else {
+				$ward_id  = null;
+				$issues[] = 'new_ward';
+			}
+
+			$street_answer = null === $street['road'] ? '' : $street['road'];
+			$saved_street  = $known && ! empty( $known['street_answer'] );
+			if ( '' === $street_answer && ! $saved_street ) {
+				$issues[] = 'needs_street';
+			}
+
+			$out[] = array(
+				'line'          => $row['line'],
+				'name'          => $row['name'],
+				'address'       => $row['address'],
+				'postcode'      => $row['postcode'],
+				'ward'          => $row['ward'],
+				'ward_id'       => $ward_id,
+				'street_answer' => $street_answer,
+				'suggestion'    => $street['suggestion'],
+				'category'      => self::category_of( $row['category'] ),
+				'status'        => 'closed' === mb_strtolower( trim( $row['status'] ), 'UTF-8' ) ? 'closed' : 'current',
+				'note'          => $row['note'],
+				'action'        => $action,
+				'existing_id'   => $known ? (int) $known['id'] : 0,
+				'issues'        => 'skip' === $action ? array() : $issues,
+			);
+		}
+		return $out;
+	}
+
+	/**
+	 * The order ward sections appear in: wards of the first course week first, then the next week's,
+	 * and so on (within a week, in the order written); wards in no week follow, alphabetically.
+	 *
+	 * @param array<int,string> $wards      id => name
+	 * @param string[]          $week_texts One comma-joined neighbourhood string per week, in week order.
+	 * @return int[] ward ids
+	 */
+	public static function order_wards( array $wards, array $week_texts ) {
+		$lengths = array();
+		$lower   = array();
+		foreach ( $wards as $id => $name ) {
+			$lower[ $id ]   = mb_strtolower( trim( $name ), 'UTF-8' );
+			$lengths[ $id ] = mb_strlen( $lower[ $id ], 'UTF-8' );
+		}
+		$by_length = array_keys( $lengths );
+		usort( $by_length, function ( $a, $b ) use ( $lengths ) {
+			return $lengths[ $b ] <=> $lengths[ $a ];
+		} );
+
+		$ordered = array();
+		foreach ( $week_texts as $text ) {
+			$rest  = ', ' . mb_strtolower( (string) $text, 'UTF-8' ) . ',';
+			$found = array();
+			foreach ( $by_length as $id ) {
+				if ( '' === $lower[ $id ] ) {
+					continue;
+				}
+				$needle = ', ' . $lower[ $id ] . ',';
+				$pos    = strpos( $rest, $needle );
+				if ( false !== $pos ) {
+					$found[ $id ] = $pos;
+					// Blank the name but keep both commas and the length, so a neighbour still matches and positions stay right.
+					$rest = substr_replace( $rest, ',' . str_repeat( '#', strlen( $needle ) - 2 ) . ',', $pos, strlen( $needle ) );
+				}
+			}
+			asort( $found );
+			foreach ( array_keys( $found ) as $id ) {
+				if ( ! isset( $ordered[ $id ] ) ) {
+					$ordered[ $id ] = true;
+				}
+			}
+		}
+
+		$rest_ids = array();
+		foreach ( $wards as $id => $name ) {
+			if ( ! isset( $ordered[ $id ] ) ) {
+				$rest_ids[ $id ] = $lower[ $id ];
+			}
+		}
+		asort( $rest_ids, SORT_STRING );
+		return array_merge( array_keys( $ordered ), array_keys( $rest_ids ) );
+	}
+}
