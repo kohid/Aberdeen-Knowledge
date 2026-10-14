@@ -281,11 +281,27 @@
 		}
 	}
 
+	/* The extra streets a place accepts: the ones checked in research first, then the ones typed in the form. */
+	function acceptedExtras( p ) {
+		var found = state.data.researched ? state.data.researched[ p.id ] : null;
+		var list = ( found && found.also ? found.also : [] ).concat( p.also_answers || [] );
+		var seen = {};
+		return list.filter( function ( street ) {
+			var key = String( street ).toLowerCase().replace( /\s+/g, " " ).trim();
+			var main = String( p.street_answer ).toLowerCase().replace( /\s+/g, " " ).trim();
+			if ( ! key || key === main || seen[ key ] ) {
+				return false;
+			}
+			seen[ key ] = true;
+			return true;
+		} );
+	}
+
 	function row( item, withWard ) {
 		var p = item.place;
 		var closed = p.status === "closed" ? " " + badge( "Closed", "danger" ) : "";
-		var also = p.also_answers && p.also_answers.length ?
-			"<div class=\"text-gray-600 fs-7\">Also accepts " + esc( p.also_answers.join( ", " ) ) + "</div>" : "";
+		var also = acceptedExtras( p ).length ?
+			"<div class=\"text-gray-600 fs-7\">Also accepts " + esc( acceptedExtras( p ).join( ", " ) ) + "</div>" : "";
 		var street = p.street_answer ?
 			"<span class=\"text-gray-800\">" + esc( p.street_answer ) + "</span>" + also :
 			badge( "Needs a street", "warning" );
