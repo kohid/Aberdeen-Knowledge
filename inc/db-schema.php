@@ -14,7 +14,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-const ATK_DB_VERSION = 4;
+const ATK_DB_VERSION = 5;
 
 function atk_table( $name ) {
 	global $wpdb;
@@ -149,6 +149,30 @@ function atk_maybe_install_db() {
 		street_id BIGINT UNSIGNED NOT NULL,
 		PRIMARY KEY  (neighbourhood_id, street_id),
 		KEY street_id (street_id)
+	) $charset_collate;";
+
+	// Places of Interest: the instructor-managed list that feeds the public map
+	// and the POI tests. A place sits in one ward (a neighbourhood id, 0 for none).
+	// See inc/poi-places.php.
+	$sql[] = "CREATE TABLE " . atk_table( 'poi_places' ) . " (
+		id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+		name VARCHAR(255) NOT NULL,
+		address TEXT NULL,
+		postcode VARCHAR(12) NOT NULL DEFAULT '',
+		street_answer VARCHAR(255) NOT NULL DEFAULT '',
+		neighbourhood_id BIGINT UNSIGNED NOT NULL DEFAULT 0,
+		category VARCHAR(60) NOT NULL DEFAULT 'Other Amenities',
+		status VARCHAR(10) NOT NULL DEFAULT 'current',
+		notes TEXT NULL,
+		lat DECIMAL(9,6) NULL,
+		lng DECIMAL(9,6) NULL,
+		geo_state VARCHAR(12) NOT NULL DEFAULT 'none',
+		sort_order INT UNSIGNED NOT NULL DEFAULT 0,
+		created_at DATETIME NOT NULL,
+		updated_at DATETIME NOT NULL,
+		PRIMARY KEY  (id),
+		KEY neighbourhood_id (neighbourhood_id),
+		KEY name_postcode (name(100), postcode)
 	) $charset_collate;";
 
 	foreach ( $sql as $statement ) {

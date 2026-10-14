@@ -70,6 +70,8 @@ require ATK_PLUGIN_DIR . '/inc/road-names-data.php';
 require ATK_PLUGIN_DIR . '/inc/instructor.php';
 require ATK_PLUGIN_DIR . '/inc/instructor-roads.php';
 require ATK_PLUGIN_DIR . '/inc/neighbourhoods.php';
+require ATK_PLUGIN_DIR . '/inc/poi-places-engine.php';
+require ATK_PLUGIN_DIR . '/inc/poi-places.php';
 require ATK_PLUGIN_DIR . '/inc/settings.php';
 require ATK_PLUGIN_DIR . '/inc/course.php';
 require ATK_PLUGIN_DIR . '/inc/demo.php';

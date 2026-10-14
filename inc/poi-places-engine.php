@@ -227,14 +227,15 @@ class ATK_Poi_Planner {
 		return mb_strtolower( trim( (string) $name ), 'UTF-8' ) . '|' . ATK_Poi_Parser::tidy_postcode( $postcode );
 	}
 
-	private static function category_of( $text ) {
+	/** The category named by a cell, or null when it is empty or not one of the eleven. */
+	private static function known_category( $text ) {
 		$text = mb_strtolower( trim( (string) $text ), 'UTF-8' );
 		foreach ( self::CATEGORIES as $category ) {
 			if ( mb_strtolower( $category, 'UTF-8' ) === $text ) {
 				return $category;
 			}
 		}
-		return self::DEFAULT_CATEGORY;
+		return null;
 	}
 
 	/**
@@ -278,6 +279,7 @@ class ATK_Poi_Planner {
 				$issues[] = 'new_ward';
 			}
 
+			$category      = self::known_category( $row['category'] );
 			$street_answer = null === $street['road'] ? '' : $street['road'];
 			$saved_street  = $known && ! empty( $known['street_answer'] );
 			if ( '' === $street_answer && ! $saved_street ) {
@@ -293,8 +295,10 @@ class ATK_Poi_Planner {
 				'ward_id'       => $ward_id,
 				'street_answer' => $street_answer,
 				'suggestion'    => $street['suggestion'],
-				'category'      => self::category_of( $row['category'] ),
+				'category'      => $category ? $category : self::DEFAULT_CATEGORY,
+				'category_given' => null !== $category,
 				'status'        => 'closed' === mb_strtolower( trim( $row['status'] ), 'UTF-8' ) ? 'closed' : 'current',
+				'status_given'  => '' !== trim( $row['status'] ),
 				'note'          => $row['note'],
 				'action'        => $action,
 				'existing_id'   => $known ? (int) $known['id'] : 0,

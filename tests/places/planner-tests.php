@@ -67,6 +67,12 @@ check( 'unknown category becomes Other Amenities', $plan[7]['category'], 'Other 
 check( 'any other status is current', $plan[7]['status'], 'current' );
 check( 'empty category becomes Other Amenities', $plan[8]['category'], 'Other Amenities' );
 
+check( 'a known category is marked as given', $plan[6]['category_given'], true );
+check( 'an unknown category is not marked as given', $plan[7]['category_given'], false );
+check( 'an empty category is not marked as given', $plan[8]['category_given'], false );
+check( 'a status cell is marked as given', array( $plan[6]['status_given'], $plan[7]['status_given'] ), array( true, true ) );
+check( 'an empty status cell is not marked as given', $plan[8]['status_given'], false );
+
 $blank = ATK_Poi_Planner::plan( array( row( 2, '22 CLUB', '', '', '' ) ), $ctx );
 check( 'blank cells stay blank in the plan', array( $blank[0]['address'], $blank[0]['postcode'], $blank[0]['ward'] ), array( '', '', '' ) );
 
