@@ -267,7 +267,7 @@ function atk_render_settings_page() {
 				<h2 class="card-title fs-4">Shortcodes</h2>
 			</div>
 			<div class="card-body">
-				<p class="text-gray-600 mb-6">Drop these into a page built with a page builder (e.g. Elementor's Shortcode widget) or any other shortcode-aware area — each one renders using the theme's real markup and styling, wired to the signed-in visitor exactly as it is everywhere else on the site.</p>
+				<p class="text-gray-600 mb-6">Drop these into a page built with a page builder (e.g. Elementor's Shortcode widget) or any other shortcode-aware area — each one renders using the plugin's real markup and styling, wired to the signed-in visitor exactly as it is everywhere else on the site.</p>
 				<?php foreach ( atk_registered_shortcodes() as $shortcode ) : ?>
 					<div class="d-flex align-items-center justify-content-between py-4 border-bottom">
 						<div>
@@ -302,7 +302,7 @@ add_shortcode( 'atk_settings', function () {
 } );
 
 /**
- * The theme's shortcode reference shown on this page — add an entry here
+ * The plugin's shortcode reference shown on this page — add an entry here
  * alongside every add_shortcode() call so the list can't drift out of sync
  * with what's actually registered.
  */
