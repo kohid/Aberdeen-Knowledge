@@ -85,5 +85,66 @@ check( 'wards in no week come last, alphabetically', ATK_Poi_Planner::order_ward
 check( 'a ward name with a comma is found whole', ATK_Poi_Planner::order_wards( array( 1 => 'Torry, Ferryhill', 2 => 'Torry', 3 => 'Ferryhill' ), array( 'Torry, Ferryhill' ) ), array( 1, 3, 2 ) );
 check( 'no weeks gives alphabetical order', ATK_Poi_Planner::order_wards( array( 5 => 'B', 6 => 'A' ), array() ), array( 6, 5 ) );
 
+// ---- Official POI course: 13 wards, 5 tests a week --------------------------------------------
+check( 'there are 13 official wards', count( ATK_Poi_Planner::OFFICIAL_WARDS ), 13 );
+check( 'ward 1 is Dyce/Bucksburn/Danestone', ATK_Poi_Planner::OFFICIAL_WARDS[0], 'Dyce/Bucksburn/Danestone' );
+check( 'ward 7 is Midstocket/Rosemount', ATK_Poi_Planner::OFFICIAL_WARDS[6], 'Midstocket/Rosemount' );
+check( 'ward 10 is Hazlehead/Queens Cross/Countesswells', ATK_Poi_Planner::OFFICIAL_WARDS[9], 'Hazlehead/Queens Cross/Countesswells' );
+check( 'ward 13 is Kincorth/Nigg/Cove', ATK_Poi_Planner::OFFICIAL_WARDS[12], 'Kincorth/Nigg/Cove' );
+
+function it_items( $n ) {
+	$out = array();
+	for ( $i = 1; $i <= $n; $i++ ) {
+		$out[] = array( 'poi' => "Place $i", 'accepted' => array( "Street $i" ) );
+	}
+	return $out;
+}
+$small = ATK_Poi_Planner::course_tests( it_items( 4 ) );
+check( 'five tests are always made', count( $small['tests'] ), 5 );
+check( 'a small ward puts every place in every test', array_map( 'count', $small['tests'] ), array( 4, 4, 4, 4, 4 ) );
+$mid = ATK_Poi_Planner::course_tests( it_items( 31 ) );
+check( 'a 31 place ward fills every test to 20', array_map( 'count', $mid['tests'] ), array( 20, 20, 20, 20, 20 ) );
+$dupe_free = true;
+$seen_any  = array();
+foreach ( $mid['tests'] as $test ) {
+	$names = array_column( $test, 'poi' );
+	if ( count( $names ) !== count( array_unique( $names ) ) ) {
+		$dupe_free = false;
+	}
+	$seen_any = array_merge( $seen_any, $names );
+}
+check( 'no place repeats inside one test', $dupe_free, true );
+check( 'every place appears in at least one test', count( array_unique( $seen_any ) ), 31 );
+check( 'the split is repeatable', ATK_Poi_Planner::course_tests( it_items( 31 ) ), $mid );
+$exact = ATK_Poi_Planner::course_tests( it_items( 100 ) );
+check( 'a 100 place ward uses each place once', count( array_unique( array_merge( ...array_map( function ( $t ) { return array_column( $t, 'poi' ); }, $exact['tests'] ) ) ) ), 100 );
+$big = ATK_Poi_Planner::course_tests( it_items( 130 ) );
+check( 'more than 100 places are capped at 100 questions', array_sum( array_map( 'count', $big['tests'] ) ), 100 );
+check( 'the places that did not fit are reported', count( $big['left_out'] ), 30 );
+check( 'an empty ward makes five empty tests', array_map( 'count', ATK_Poi_Planner::course_tests( array() )['tests'] ), array( 0, 0, 0, 0, 0 ) );
+
+$places = array(
+	array( 'name' => 'Old Blackfriars', 'label' => 'Old Blackfriars', 'postcode' => 'AB11 5BB', 'ward' => 'George Street/Harbour', 'street_answer' => 'CASTLEGATE', 'status' => 'current' ),
+	array( 'name' => '22 CLUB', 'label' => '22 CLUB', 'postcode' => 'AB10 1UB', 'ward' => 'Midstocket / Rosemount', 'street_answer' => 'ROSE STREET', 'status' => 'current' ),
+	array( 'name' => 'Seaview Caravan Park', 'label' => 'Seaview Caravan Park', 'postcode' => 'AB23 8BR', 'ward' => 'Bridge of Don', 'street_answer' => '', 'status' => 'current' ),
+	array( 'name' => 'Old Cinema', 'label' => 'Old Cinema', 'postcode' => 'AB10 1AA', 'ward' => 'Bridge of Don', 'street_answer' => 'KING STREET', 'status' => 'closed' ),
+	array( 'name' => 'Trinity Court', 'label' => 'Trinity Court', 'postcode' => 'AB32 6LS', 'ward' => 'Westhill and District', 'street_answer' => 'TRINITY COURT', 'status' => 'current' ),
+	array( 'name' => 'No Ward Place', 'label' => 'No Ward Place', 'postcode' => 'AB10 1AB', 'ward' => '', 'street_answer' => 'KING STREET', 'status' => 'current' ),
+);
+$research = array(
+	ATK_Poi_Planner::research_key( 'Old Blackfriars', 'AB11 5BB' ) => array( 'street' => 'Castle Street', 'also' => array( 'Castlegate' ) ),
+);
+$plan = ATK_Poi_Planner::course_plan( $places, $research );
+check( 'the plan has 13 weeks', count( $plan['weeks'] ), 13 );
+check( 'week numbers run 1 to 13', array_column( $plan['weeks'], 'number' ), range( 1, 13 ) );
+check( 'week 8 is George Street/Harbour', $plan['weeks'][7]['ward'], 'George Street/Harbour' );
+check( 'researched street comes first, saved and extra after', $plan['weeks'][7]['questions'][0]['accepted'], array( 'Castle Street', 'Castlegate' ) );
+check( 'a ward spelled with spaces still lands in its week', $plan['weeks'][6]['questions'][0]['poi'], '22 CLUB' );
+check( 'an unresearched answer is just the saved street', $plan['weeks'][6]['questions'][0]['accepted'], array( 'ROSE STREET' ) );
+check( 'a place with no street answer is left out and named', $plan['weeks'][1]['no_answer'], array( 'Seaview Caravan Park' ) );
+check( 'a closed place is not asked', count( $plan['weeks'][1]['questions'] ), 0 );
+check( 'places outside the 13 wards are reported', array_column( $plan['outside'], 'name' ), array( 'Trinity Court', 'No Ward Place' ) );
+check( 'each week carries five tests', count( $plan['weeks'][7]['tests'] ), 5 );
+
 echo "\n$checks checks, $failures failed\n";
 exit( $failures ? 1 : 0 );

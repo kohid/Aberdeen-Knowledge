@@ -1,0 +1,62 @@
+{
+  "about": "Street answers for Places of Interest that were checked against a real source. The Official POI test asks the street first, then accepts the others. An entry whose street matches the sheet is a confirmation, not a correction. Seaview Caravan Park has no named road in any source reachable during the check, so it has no entry and is left out of the test until an instructor gives it a street.",
+  "checked": "2026-10-15",
+  "places": [
+    {
+      "name": "Aberdeen Blood Donor Centre",
+      "postcode": "AB25 2ZW",
+      "street": "Foresterhill Road",
+      "also": [],
+      "source": "https://www.scotblood.co.uk/donation-locations/aberdeen-blood-donor-centre",
+      "note": "The donation service lists Foresterhill Road, Foresterhill, AB25 2ZW. The sheet only says Foresterhill, which is an area."
+    },
+    {
+      "name": "Provost Hogg Court",
+      "postcode": "AB11 9NF",
+      "street": "Victoria Road",
+      "also": [],
+      "source": "https://housingcare.org/housing-care/facility-info-1372-provost-hogg-court-torry-scotland",
+      "note": "Listed at Victoria Road, Torry, AB11 9NF. The sheet gives the court's own name as the address."
+    },
+    {
+      "name": "Mearns Quay",
+      "postcode": "AB11 5PH",
+      "street": "Mearns Quay",
+      "also": [],
+      "source": "https://en.wikipedia.org/wiki/List_of_listed_buildings_in_Aberdeen/5",
+      "note": "Mearns Quay is itself a street (the listed-buildings record names Mearns Quay and Torry Quay). It is not in the OpenStreetMap road list the plugin uses, so the answer rests on this record only."
+    },
+    {
+      "name": "Old Blackfriars",
+      "postcode": "AB11 5BB",
+      "street": "Castle Street",
+      "also": ["Castlegate"],
+      "source": "https://camra.org.uk/pubs/old-blackfriars-aberdeen-112821",
+      "note": "The pub's listed address is 52 Castle Street, AB11 5BB. The sheet says Castlegate, so both are accepted."
+    },
+    {
+      "name": "Linx Ice Arena",
+      "postcode": "AB24 5NR",
+      "street": "Beach Esplanade",
+      "also": ["Loverose Way"],
+      "source": "https://www.sportaberdeen.co.uk/venues/linx-ice-arena",
+      "note": "The operator lists Beach Esplanade, AB24 5NR. The sheet says Loverose Way, so both are accepted."
+    },
+    {
+      "name": "Marriott Hotel",
+      "postcode": "AB21 0AF",
+      "street": "Argyll Way",
+      "also": [],
+      "source": "https://britishairways.com/en-gb/destinations/hotel-information/Aberdeen/Courtyard-Aberdeen-Airport/GB-ABZ-4432000",
+      "note": "Confirms the sheet: Argyll Way, Aberdeen Airport, Dyce, AB21 0AF."
+    },
+    {
+      "name": "Leonardo Inn",
+      "postcode": "AB21 0AF",
+      "street": "Argyll Road",
+      "also": [],
+      "source": "https://leonardohotels.co.uk/hotels/aberdeen/leonardo-aberdeen-airport/map",
+      "note": "Confirms the sheet: Argyll Road, AB21 0AF. Argyll Way and Argyll Road share this postcode."
+    }
+  ]
+}

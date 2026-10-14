@@ -384,6 +384,81 @@ foreach ( atk_poi_test_questions() as $q ) {
 t( 'places that share a name become two distinct test questions', $dq, array( 'ZZ-IT Dup (AB10 1AA)' => 'AAA ROAD', 'ZZ-IT Dup (AB11 2BB)' => 'BBB ROAD' ) );
 t( 'the Course Builder picker lists both places apart', array_values( array_intersect( atk_instructor_known_poi_names(), array( 'ZZ-IT Dup (AB10 1AA)', 'ZZ-IT Dup (AB11 2BB)', 'ZZ-IT Dup' ) ) ), array( 'ZZ-IT Dup (AB10 1AA)', 'ZZ-IT Dup (AB11 2BB)' ) );
 
+/* ---- Official POI course: weeks 1 to 13 ---- */
+it_clean();
+$created_wards = array();
+$ward_ids      = array();
+foreach ( array( 'Bridge of Don', 'George Street/Harbour' ) as $w ) {
+	$cache = null;
+	$made  = ATK_Nb_Store::ensure_neighbourhood( $w, $cache );
+	$ward_ids[ $w ] = (int) $made[0];
+	if ( $made[1] ) {
+		$created_wards[] = (int) $made[0];
+	}
+}
+$mk = array();
+foreach ( array(
+	array( 'name' => 'ZZ-IT Course A', 'postcode' => 'AB23 1AA', 'street_answer' => 'ALPHA ROAD', 'ward_id' => $ward_ids['Bridge of Don'], 'status' => 'current' ),
+	array( 'name' => 'ZZ-IT Course B', 'postcode' => 'AB23 1AB', 'street_answer' => 'BETA ROAD', 'ward_id' => $ward_ids['Bridge of Don'], 'status' => 'current' ),
+	array( 'name' => 'ZZ-IT Course Closed', 'postcode' => 'AB23 1AC', 'street_answer' => 'GAMMA ROAD', 'ward_id' => $ward_ids['Bridge of Don'], 'status' => 'closed' ),
+	array( 'name' => 'ZZ-IT Course No Street', 'postcode' => 'AB23 1AD', 'street_answer' => '', 'ward_id' => $ward_ids['Bridge of Don'], 'status' => 'current' ),
+	array( 'name' => 'Old Blackfriars', 'postcode' => 'AB11 5BB', 'street_answer' => 'Castlegate', 'ward_id' => $ward_ids['George Street/Harbour'], 'status' => 'current' ),
+) as $fields ) {
+	$mk[] = ATK_Poi_Store::save( $fields )['id'];
+}
+$before_weeks = (int) $wpdb->get_var( 'SELECT COUNT(*) FROM ' . atk_table( 'course_weeks' ) . " WHERE course_type = 'poi'" );
+
+$research = ATK_Poi_Store::course_research();
+t( 'the researched answers file loads', isset( $research[ ATK_Poi_Planner::research_key( 'Old Blackfriars', 'AB11 5BB' ) ] ), true );
+t( 'every researched entry names a source', count( array_filter( $research, function ( $r ) { return empty( $r['source'] ); } ) ), 0 );
+
+$pv = ATK_Poi_Store::course_preview();
+t( 'the preview lists 13 weeks', count( $pv['weeks'] ), 13 );
+t( 'week 2 is Bridge of Don with two questions and no answer for one place', array( $pv['weeks'][1]['ward'], count( $pv['weeks'][1]['questions'] ), $pv['weeks'][1]['no_answer'] ), array( 'Bridge of Don', 2, array( 'ZZ-IT Course No Street' ) ) );
+t( 'a week with no course week yet is marked new', $pv['weeks'][1]['state'], 'new' );
+t( 'a ward with no places is marked nothing to ask', $pv['weeks'][12]['state'], 'nothing' );
+
+$res = ATK_Poi_Store::course_apply( false );
+$week = $wpdb->get_row( "SELECT * FROM " . atk_table( 'course_weeks' ) . " WHERE course_type = 'poi' AND neighbourhoods = 'Bridge of Don'" );
+t( 'applying creates the Bridge of Don week as week 2', $week ? (int) $week->week_number : 0, 2 );
+$qs = $wpdb->get_results( $wpdb->prepare( 'SELECT test_number, poi, accepted FROM ' . atk_table( 'course_poi_questions' ) . ' WHERE week_id = %d ORDER BY test_number, sort_order', $week->id ) );
+t( 'each of the five tests holds both places', array_count_values( array_map( function ( $q ) { return (int) $q->test_number; }, $qs ) ), array( 1 => 2, 2 => 2, 3 => 2, 4 => 2, 5 => 2 ) );
+t( 'the closed place and the one with no street are not asked', count( array_unique( array_column( $qs, 'poi' ) ) ), 2 );
+t( 'accepted answers are saved as JSON', json_decode( $qs[0]->accepted, true ), array( 'ALPHA ROAD' ) );
+$bf = $wpdb->get_row( "SELECT q.accepted FROM " . atk_table( 'course_poi_questions' ) . " q WHERE q.poi = 'Old Blackfriars' LIMIT 1" );
+t( 'the researched street is asked first and the saved one is also accepted', $bf ? json_decode( $bf->accepted, true ) : null, array( 'Castle Street', 'Castlegate' ) );
+t( 'the result counts the weeks created', $res['weeks_created'] >= 2, true );
+
+$count_q = function () use ( $wpdb ) { return (int) $wpdb->get_var( 'SELECT COUNT(*) FROM ' . atk_table( 'course_poi_questions' ) ); };
+$q_before = $count_q();
+$again = ATK_Poi_Store::course_apply( false );
+t( 'running it again keeps weeks that already have questions', array( $count_q() === $q_before, $again['weeks_kept'] >= 2, $again['weeks_created'] ), array( true, true, 0 ) );
+$pv2 = ATK_Poi_Store::course_preview();
+t( 'the preview then shows the week as already filled', $pv2['weeks'][1]['state'], 'filled' );
+ATK_Poi_Store::course_apply( true );
+t( 'replace rewrites the questions without doubling them', $count_q(), $q_before );
+
+ob_start();
+atk_render_instructor_poi_course_card();
+$card = ob_get_clean();
+t( 'the card names the 13 wards in order', strpos( $card, 'Dyce/Bucksburn/Danestone' ) < strpos( $card, 'Kincorth/Nigg/Cove' ), true );
+t( 'the card has the fill button', strpos( $card, 'Fill weeks 1 to 13' ) !== false, true );
+t( 'the card posts to the fill action with a nonce', strpos( $card, 'atk_instructor_fill_poi_course' ) !== false && strpos( $card, 'atk_nonce' ) !== false, true );
+
+// Clean up what this block made.
+$week_ids = $wpdb->get_col( "SELECT id FROM " . atk_table( 'course_weeks' ) . " WHERE course_type = 'poi' AND neighbourhoods IN ('Bridge of Don','George Street/Harbour')" );
+foreach ( $week_ids as $wid ) {
+	$wpdb->delete( atk_table( 'course_poi_questions' ), array( 'week_id' => (int) $wid ) );
+	$wpdb->delete( atk_table( 'course_weeks' ), array( 'id' => (int) $wid ) );
+}
+foreach ( $mk as $pid ) {
+	ATK_Poi_Store::delete( $pid );
+}
+foreach ( $created_wards as $wid ) {
+	$wpdb->delete( atk_table( 'nb_neighbourhoods' ), array( 'id' => $wid ) );
+}
+ATK_Poi_Store::flush_cache();
+
 
 /* ---- end ---- */
 it_clean();

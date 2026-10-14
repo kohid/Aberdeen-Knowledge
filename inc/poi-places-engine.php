@@ -218,6 +218,114 @@ class ATK_Poi_Street_Matcher {
  */
 class ATK_Poi_Planner {
 
+	/** Aberdeen City Council's 13 wards in their official order (ward 1 first). Week N of the Official POI test is ward N. */
+	const OFFICIAL_WARDS = array(
+		'Dyce/Bucksburn/Danestone',
+		'Bridge of Don',
+		'Kingswells/Sheddocksley/Summerhill',
+		'Northfield/Mastrick North',
+		'Hilton/Woodside/Stockethill',
+		'Tillydrone/Seaton/Old Aberdeen',
+		'Midstocket/Rosemount',
+		'George Street/Harbour',
+		'Lower Deeside',
+		'Hazlehead/Queens Cross/Countesswells',
+		'Airyhall/Broomhill/Garthdee',
+		'Torry/Ferryhill',
+		'Kincorth/Nigg/Cove',
+	);
+
+	const COURSE_TESTS_PER_WEEK     = 5;
+	const COURSE_QUESTIONS_PER_TEST = 20;
+
+	/** Key for the researched answers file: place name plus postcode, ignoring case and spacing. */
+	public static function research_key( $name, $postcode ) {
+		return mb_strtolower( trim( (string) $name ), 'UTF-8' ) . '|' . strtoupper( preg_replace( '/\s+/', '', (string) $postcode ) );
+	}
+
+	/**
+	 * Splits one ward's questions into the week's five tests. A ward with 20 places or fewer
+	 * puts every place in every test; a bigger ward fills each test to 20 by walking the list
+	 * round (so no place repeats inside a test and every place is asked at least once). At most
+	 * 100 questions are used; the rest are returned in `left_out`.
+	 *
+	 * @param array[] $questions Each array( 'poi' => string, 'accepted' => string[] ).
+	 * @return array{tests: array[], left_out: string[]}
+	 */
+	public static function course_tests( array $questions ) {
+		$questions = array_values( $questions );
+		$cap       = self::COURSE_TESTS_PER_WEEK * self::COURSE_QUESTIONS_PER_TEST;
+		$used      = array_slice( $questions, 0, $cap );
+		$left_out  = array_column( array_slice( $questions, $cap ), 'poi' );
+		$n         = count( $used );
+		$tests     = array();
+		for ( $t = 0; $t < self::COURSE_TESTS_PER_WEEK; $t++ ) {
+			if ( $n <= self::COURSE_QUESTIONS_PER_TEST ) {
+				$tests[] = $used;
+				continue;
+			}
+			$test = array();
+			for ( $j = 0; $j < self::COURSE_QUESTIONS_PER_TEST; $j++ ) {
+				$test[] = $used[ ( $t * self::COURSE_QUESTIONS_PER_TEST + $j ) % $n ];
+			}
+			$tests[] = $test;
+		}
+		return array( 'tests' => $tests, 'left_out' => $left_out );
+	}
+
+	/**
+	 * What the Official POI test would hold, week by week.
+	 *
+	 * @param array[] $places   Each with name, label, postcode, ward (name), street_answer, status.
+	 * @param array   $research research_key() => array( 'street' => string, 'also' => string[] ).
+	 * @return array{weeks: array[], outside: array[]}
+	 */
+	public static function course_plan( array $places, array $research ) {
+		$index = array();
+		foreach ( self::OFFICIAL_WARDS as $i => $ward ) {
+			$index[ ATK_Poi_Parser::ward_key( $ward ) ] = $i;
+		}
+		$weeks = array();
+		foreach ( self::OFFICIAL_WARDS as $i => $ward ) {
+			$weeks[ $i ] = array( 'number' => $i + 1, 'ward' => $ward, 'questions' => array(), 'no_answer' => array(), 'tests' => array(), 'left_out' => array() );
+		}
+		$outside = array();
+		foreach ( $places as $place ) {
+			$key = ATK_Poi_Parser::ward_key( (string) $place['ward'] );
+			if ( ! isset( $index[ $key ] ) ) {
+				$outside[] = array( 'name' => $place['name'], 'ward' => (string) $place['ward'] );
+				continue;
+			}
+			if ( 'current' !== $place['status'] ) {
+				continue;
+			}
+			$i     = $index[ $key ];
+			$found = isset( $research[ self::research_key( $place['name'], $place['postcode'] ) ] ) ? $research[ self::research_key( $place['name'], $place['postcode'] ) ] : array();
+			$saved = trim( (string) $place['street_answer'] );
+			$first = ! empty( $found['street'] ) ? $found['street'] : $saved;
+			if ( '' === $first ) {
+				$weeks[ $i ]['no_answer'][] = $place['name'];
+				continue;
+			}
+			$accepted = array();
+			$seen     = array();
+			foreach ( array_merge( array( $first ), isset( $found['also'] ) ? (array) $found['also'] : array(), array( $saved ) ) as $answer ) {
+				$norm = ATK_Nb_Parser::normalise_name( $answer );
+				if ( '' !== $norm && ! isset( $seen[ $norm ] ) ) {
+					$seen[ $norm ] = true;
+					$accepted[]    = $answer;
+				}
+			}
+			$weeks[ $i ]['questions'][] = array( 'poi' => $place['label'], 'accepted' => $accepted );
+		}
+		foreach ( $weeks as $i => $week ) {
+			$split                  = self::course_tests( $week['questions'] );
+			$weeks[ $i ]['tests']    = $split['tests'];
+			$weeks[ $i ]['left_out'] = $split['left_out'];
+		}
+		return array( 'weeks' => $weeks, 'outside' => $outside );
+	}
+
 	/**
 	 * The name each place is shown and asked under. A name used by more than one
 	 * place gets its postcode added, so two branches of one chain stay two places.

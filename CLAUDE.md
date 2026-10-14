@@ -196,6 +196,18 @@ empty and the instructor imports the official sheet.
   again. Places without a pin can be placed by hand (`manual`, never replaced by a lookup). The public Nominatim server is for
   light use.
 - **Dashboard order**: one section per ward, ordered by the Course Builder's weeks (poi-track weeks, then street-track weeks).
+- **Official POI test**: the Course Builder's POI Test track has a card, "Fill the Official POI test from your places"
+  (`atk_render_instructor_poi_course_card()`), that makes 13 weeks, one per Aberdeen City Council ward in official order
+  (`ATK_Poi_Planner::OFFICIAL_WARDS`: 1 Dyce/Bucksburn/Danestone, 2 Bridge of Don, 3 Kingswells/Sheddocksley/Summerhill,
+  4 Northfield/Mastrick North, 5 Hilton/Woodside/Stockethill, 6 Tillydrone/Seaton/Old Aberdeen, 7 Midstocket/Rosemount,
+  8 George Street/Harbour, 9 Lower Deeside, 10 Hazlehead/Queens Cross/Countesswells, 11 Airyhall/Broomhill/Garthdee,
+  12 Torry/Ferryhill, 13 Kincorth/Nigg/Cove). A ward's current places with a street answer become five tests: a ward with
+  20 places or fewer asks every place in every test, a bigger one fills each test to 20 by walking the list round, so no
+  place repeats inside a test (100 questions at most). Existing weeks are never touched unless "rewrite" is ticked. The
+  preview and the fill share one plan (`ATK_Poi_Planner::course_plan`, `ATK_Poi_Store::course_preview` / `course_apply`).
+- **Researched answers**: `assets/data/poi-research.json` holds streets checked against a real source (name, postcode,
+  street, extra accepted spellings, source link, note). The researched street is asked first and the sheet's street is
+  also accepted. Places with no street answer and no research (Seaview Caravan Park) are left out, never guessed.
 - **Public**: `GET atk/v1/poi-venues` (cached one minute, `Cache-Control: public, max-age=60`) returns the pinned places; the map
   page reads only that route. The POI test and the Course Builder POI picker read the saved places that are current and have
   a street answer.

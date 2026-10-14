@@ -875,6 +875,8 @@ function atk_render_instructor_course_tab() {
 		</div>
 	</div>
 
+	<?php if ( 'poi' === $type ) { atk_render_instructor_poi_course_card(); } ?>
+
 	<div class="card mb-6">
 		<div class="card-header">
 			<h2 class="card-title fs-4">Add Week &mdash; <?php echo esc_html( $types[ $type ]['label'] ); ?></h2>

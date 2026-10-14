@@ -390,6 +390,141 @@ class ATK_Poi_Store {
 		return $out;
 	}
 
+	/* ---------------------------------------------------------------- */
+	/* Official POI test: weeks 1 to 13 filled from the saved places     */
+	/* ---------------------------------------------------------------- */
+
+	/** @return array<string,array> research_key => array( street, also, source, note ), from assets/data/poi-research.json. */
+	public static function course_research() {
+		$file = ATK_PLUGIN_DIR . '/assets/data/poi-research.json';
+		if ( ! is_readable( $file ) ) {
+			return array();
+		}
+		$data = json_decode( (string) file_get_contents( $file ), true );
+		$out  = array();
+		foreach ( is_array( $data ) && ! empty( $data['places'] ) ? $data['places'] : array() as $row ) {
+			if ( empty( $row['name'] ) || empty( $row['street'] ) ) {
+				continue;
+			}
+			$out[ ATK_Poi_Planner::research_key( $row['name'], isset( $row['postcode'] ) ? $row['postcode'] : '' ) ] = array(
+				'street' => (string) $row['street'],
+				'also'   => isset( $row['also'] ) ? (array) $row['also'] : array(),
+				'source' => isset( $row['source'] ) ? (string) $row['source'] : '',
+				'note'   => isset( $row['note'] ) ? (string) $row['note'] : '',
+			);
+		}
+		return $out;
+	}
+
+	/** POI course weeks that already exist: ward key => array( id, week_number, neighbourhoods, questions ). Read straight from the database. */
+	private static function existing_course_weeks() {
+		global $wpdb;
+		$rows = $wpdb->get_results( "SELECT id, week_number, neighbourhoods FROM " . atk_table( 'course_weeks' ) . " WHERE course_type = 'poi' ORDER BY sort_order ASC, id ASC" );
+		$out  = array();
+		foreach ( (array) $rows as $row ) {
+			$count = (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM ' . atk_table( 'course_poi_questions' ) . ' WHERE week_id = %d', $row->id ) );
+			$key   = ATK_Poi_Parser::ward_key( $row->neighbourhoods );
+			if ( ! isset( $out[ $key ] ) ) {
+				$out[ $key ] = array( 'id' => (int) $row->id, 'week_number' => (int) $row->week_number, 'neighbourhoods' => $row->neighbourhoods, 'questions' => $count );
+			}
+		}
+		return $out;
+	}
+
+	/**
+	 * What filling the Official POI test would do, week by week. Writes nothing.
+	 *
+	 * @return array{weeks: array[], outside: array[]}
+	 */
+	public static function course_preview() {
+		$wards  = self::wards();
+		$places = array();
+		foreach ( self::labelled() as $place ) {
+			$places[] = array(
+				'name' => $place['name'], 'label' => $place['label'], 'postcode' => $place['postcode'],
+				'ward' => isset( $wards[ $place['ward_id'] ] ) ? $wards[ $place['ward_id'] ] : '',
+				'street_answer' => $place['street_answer'], 'status' => $place['status'],
+			);
+		}
+		$plan     = ATK_Poi_Planner::course_plan( $places, self::course_research() );
+		$existing = self::existing_course_weeks();
+		foreach ( $plan['weeks'] as $i => $week ) {
+			$key = ATK_Poi_Parser::ward_key( $week['ward'] );
+			$have = isset( $existing[ $key ] ) ? $existing[ $key ] : null;
+			if ( ! $week['questions'] ) {
+				$state = 'nothing';
+			} elseif ( ! $have ) {
+				$state = 'new';
+			} elseif ( 0 === $have['questions'] ) {
+				$state = 'empty';
+			} else {
+				$state = 'filled';
+			}
+			$plan['weeks'][ $i ]['state']              = $state;
+			$plan['weeks'][ $i ]['existing_week_id']   = $have ? $have['id'] : 0;
+			$plan['weeks'][ $i ]['existing_questions'] = $have ? $have['questions'] : 0;
+		}
+		return $plan;
+	}
+
+	/**
+	 * Creates the missing POI weeks and fills the empty ones. A week that already has
+	 * questions is left alone unless $replace is true. Nothing else is ever deleted.
+	 *
+	 * @return array{weeks_created:int,weeks_filled:int,weeks_kept:int,weeks_replaced:int,questions:int}
+	 */
+	public static function course_apply( $replace ) {
+		global $wpdb;
+		$result = array( 'weeks_created' => 0, 'weeks_filled' => 0, 'weeks_kept' => 0, 'weeks_replaced' => 0, 'questions' => 0 );
+		$wards  = self::wards();
+		$names  = array();
+		foreach ( $wards as $name ) {
+			$names[ ATK_Poi_Parser::ward_key( $name ) ] = $name;
+		}
+		$plan  = self::course_preview();
+		$order = (int) $wpdb->get_var( "SELECT MAX(sort_order) FROM " . atk_table( 'course_weeks' ) . " WHERE course_type = 'poi'" );
+		foreach ( $plan['weeks'] as $week ) {
+			if ( 'nothing' === $week['state'] ) {
+				continue;
+			}
+			if ( 'filled' === $week['state'] && ! $replace ) {
+				$result['weeks_kept']++;
+				continue;
+			}
+			$week_id = $week['existing_week_id'];
+			if ( 'new' === $week['state'] ) {
+				$key   = ATK_Poi_Parser::ward_key( $week['ward'] );
+				$order++;
+				$wpdb->insert( atk_table( 'course_weeks' ), array(
+					'course_type'    => 'poi',
+					'week_number'    => $week['number'],
+					'neighbourhoods' => isset( $names[ $key ] ) ? $names[ $key ] : $week['ward'],
+					'sort_order'     => $order,
+				) );
+				$week_id = (int) $wpdb->insert_id;
+				$result['weeks_created']++;
+			} elseif ( 'filled' === $week['state'] ) {
+				$wpdb->delete( atk_table( 'course_poi_questions' ), array( 'week_id' => $week_id ) );
+				$result['weeks_replaced']++;
+			} else {
+				$result['weeks_filled']++;
+			}
+			foreach ( $week['tests'] as $t => $test ) {
+				foreach ( $test as $n => $question ) {
+					$wpdb->insert( atk_table( 'course_poi_questions' ), array(
+						'week_id'     => $week_id,
+						'test_number' => $t + 1,
+						'poi'         => $question['poi'],
+						'accepted'    => wp_json_encode( array_values( $question['accepted'] ) ),
+						'sort_order'  => $n + 1,
+					) );
+					$result['questions']++;
+				}
+			}
+		}
+		return $result;
+	}
+
 	public static function flush_cache() {
 		delete_transient( self::CACHE_KEY );
 		// LiteSpeed Cache keeps REST answers on its own clock (7 days by default).
@@ -590,4 +725,169 @@ function atk_render_instructor_poi_places_tab() {
 	?>
 	<div id="atk-poi-admin-root"><p class="text-gray-600">Loading places of interest&hellip;</p></div>
 	<?php
+}
+
+
+/* -------------------------------------------------------------------- */
+/* Course Builder: fill the Official POI test (weeks 1 to 13) from the places */
+/* -------------------------------------------------------------------- */
+
+/** "all in each of 5 tests" when every place is in every test, otherwise "20 in each of 5 tests". */
+function atk_poi_course_per_test_text( $asked, $per ) {
+	return (int) $asked === (int) $per ? 'all in each of 5 tests' : sprintf( '%d in each of 5 tests', $per );
+}
+
+/**
+ * The card at the top of the Course Builder's POI Test track: a preview of the 13
+ * weeks (one per Aberdeen City Council ward, in ward order) and the button that
+ * fills them. Weeks that already hold questions are kept unless "replace" is ticked.
+ */
+function atk_render_instructor_poi_course_card() {
+	$plan     = ATK_Poi_Store::course_preview();
+	$research = ATK_Poi_Store::course_research();
+	$places   = 0;
+	foreach ( $plan['weeks'] as $week ) {
+		$places += count( $week['questions'] );
+	}
+	$badges = array(
+		'new'     => array( 'badge-light-primary', 'New week' ),
+		'empty'   => array( 'badge-light-warning', 'Empty week, will be filled' ),
+		'nothing' => array( 'badge-light-secondary', 'No places yet' ),
+	);
+	?>
+	<div class="card mb-6" id="atk-poi-course-card">
+		<div class="card-header">
+			<h2 class="card-title fs-4">Fill the Official POI test from your places</h2>
+		</div>
+		<div class="card-body">
+			<p class="text-gray-600 mb-5">Week 1 is ward 1 of Aberdeen City Council, week 2 is ward 2, and so on up to week 13. Each week gets five tests built from that ward's current places that have a street answer. The street researched for a place comes first and the sheet's street is also accepted.</p>
+
+			<?php if ( isset( $_GET['poi_fill'] ) ) : // phpcs:ignore WordPress.Security.NonceVerification ?>
+				<div class="alert alert-success d-flex align-items-center p-5 mb-6"><span>
+					<?php
+					printf(
+						'Done. %1$d weeks created, %2$d empty weeks filled, %3$d weeks rewritten, %4$d weeks kept as they were. %5$d questions saved.',
+						isset( $_GET['fill_created'] ) ? (int) $_GET['fill_created'] : 0, // phpcs:ignore WordPress.Security.NonceVerification
+						isset( $_GET['fill_filled'] ) ? (int) $_GET['fill_filled'] : 0, // phpcs:ignore WordPress.Security.NonceVerification
+						isset( $_GET['fill_replaced'] ) ? (int) $_GET['fill_replaced'] : 0, // phpcs:ignore WordPress.Security.NonceVerification
+						isset( $_GET['fill_kept'] ) ? (int) $_GET['fill_kept'] : 0, // phpcs:ignore WordPress.Security.NonceVerification
+						isset( $_GET['fill_q'] ) ? (int) $_GET['fill_q'] : 0 // phpcs:ignore WordPress.Security.NonceVerification
+					);
+					?>
+				</span></div>
+			<?php endif; ?>
+
+			<?php if ( 0 === $places ) : ?>
+				<div class="alert alert-warning d-flex align-items-center p-5 mb-6"><span>No places have a ward and a street answer yet. Import the Places of Interest sheet under Study Tools first.</span></div>
+			<?php endif; ?>
+
+			<div class="table-responsive d-none d-md-block">
+				<table class="table table-row-dashed align-middle mb-0">
+					<thead>
+						<tr class="text-gray-600 fw-bolder fs-7">
+							<th>Week</th>
+							<th>Ward</th>
+							<th>Places asked</th>
+							<th>Status</th>
+							<th>Left out</th>
+						</tr>
+					</thead>
+					<tbody>
+						<?php foreach ( $plan['weeks'] as $week ) :
+							$asked = count( $week['questions'] );
+							$per   = isset( $week['tests'][0] ) ? count( $week['tests'][0] ) : 0;
+							if ( 'filled' === $week['state'] ) {
+								$badge = array( 'badge-light-success', sprintf( 'Has %d questions, kept', $week['existing_questions'] ) );
+							} else {
+								$badge = $badges[ $week['state'] ];
+							}
+							$left = array_merge( $week['no_answer'], $week['left_out'] );
+							?>
+							<tr>
+								<td class="fw-bolder"><?php echo (int) $week['number']; ?></td>
+								<td><?php echo esc_html( $week['ward'] ); ?></td>
+								<td>
+									<?php echo (int) $asked; ?>
+									<?php if ( $asked ) : ?><span class="text-gray-600 fs-7">&middot; <?php echo esc_html( atk_poi_course_per_test_text( $asked, $per ) ); ?></span><?php endif; ?>
+								</td>
+								<td><span class="badge <?php echo esc_attr( $badge[0] ); ?>"><?php echo esc_html( $badge[1] ); ?></span></td>
+								<td class="text-gray-600 fs-7">
+									<?php
+									if ( $left ) {
+										$shown = array_slice( $left, 0, 3 );
+										echo esc_html( count( $left ) . ': ' . implode( ', ', $shown ) . ( count( $left ) > 3 ? ' and more' : '' ) );
+									} else {
+										echo '&ndash;';
+									}
+									?>
+								</td>
+							</tr>
+						<?php endforeach; ?>
+					</tbody>
+				</table>
+			</div>
+
+			<div class="d-md-none" id="atk-poi-course-stack">
+				<?php foreach ( $plan['weeks'] as $week ) :
+					$asked = count( $week['questions'] );
+					$per   = isset( $week['tests'][0] ) ? count( $week['tests'][0] ) : 0;
+					$badge = 'filled' === $week['state'] ? array( 'badge-light-success', sprintf( 'Has %d questions, kept', $week['existing_questions'] ) ) : $badges[ $week['state'] ];
+					$left  = array_merge( $week['no_answer'], $week['left_out'] );
+					?>
+					<div class="py-3 border-bottom">
+						<div><span class="fw-bolder me-2"><?php echo (int) $week['number']; ?></span><?php echo esc_html( $week['ward'] ); ?></div>
+						<div class="d-flex flex-wrap align-items-center gap-2 mt-2">
+							<span class="badge <?php echo esc_attr( $badge[0] ); ?>"><?php echo esc_html( $badge[1] ); ?></span>
+							<?php if ( $asked ) : ?><span class="text-gray-600 fs-7"><?php echo (int) $asked; ?> places &middot; <?php echo esc_html( atk_poi_course_per_test_text( $asked, $per ) ); ?></span><?php endif; ?>
+						</div>
+						<?php if ( $left ) : ?><div class="text-gray-600 fs-7 mt-1">Left out: <?php echo esc_html( implode( ', ', array_slice( $left, 0, 3 ) ) . ( count( $left ) > 3 ? ' and more' : '' ) ); ?></div><?php endif; ?>
+					</div>
+				<?php endforeach; ?>
+			</div>
+
+			<?php if ( $plan['outside'] ) : ?>
+				<p class="text-gray-600 fs-7 mt-4 mb-0"><?php echo esc_html( count( $plan['outside'] ) ); ?> places are not in one of the 13 wards and are not used, for example <?php echo esc_html( implode( ', ', array_slice( array_column( $plan['outside'], 'name' ), 0, 3 ) ) ); ?>. Fix their ward under Study Tools if they belong in a week.</p>
+			<?php endif; ?>
+
+			<?php if ( $research ) : ?>
+				<details class="mt-4">
+					<summary class="text-gray-600 fs-7"><?php echo esc_html( count( $research ) ); ?> places have a researched street</summary>
+					<ul class="fs-7 text-gray-600 mt-3 mb-0">
+						<?php foreach ( $research as $item ) : ?>
+							<li class="mb-2"><?php echo esc_html( $item['note'] ); ?><?php if ( $item['source'] ) : ?> <a href="<?php echo esc_url( $item['source'] ); ?>" target="_blank" rel="noopener">Source</a><?php endif; ?></li>
+						<?php endforeach; ?>
+					</ul>
+				</details>
+			<?php endif; ?>
+
+			<form method="post" action="<?php echo esc_url( admin_url( 'admin-ajax.php' ) ); ?>" class="d-flex flex-wrap align-items-center gap-5 mt-6" id="atk-poi-fill-form">
+				<input type="hidden" name="action" value="atk_instructor_fill_poi_course" />
+				<?php wp_nonce_field( ATK_INSTRUCTOR_NONCE_ACTION, 'atk_nonce' ); ?>
+				<button type="submit" class="btn btn-primary">Fill weeks 1 to 13</button>
+				<div class="form-check">
+					<input class="form-check-input" type="checkbox" name="replace" value="1" id="atk-poi-fill-replace" />
+					<label class="form-check-label" for="atk-poi-fill-replace">Also rewrite weeks that already have questions</label>
+				</div>
+			</form>
+		</div>
+	</div>
+	<script>
+		document.getElementById( 'atk-poi-fill-form' ).addEventListener( 'submit', function ( e ) {
+			if ( document.getElementById( 'atk-poi-fill-replace' ).checked && ! window.confirm( 'This deletes the questions now in those weeks and replaces them. Continue?' ) ) {
+				e.preventDefault();
+			}
+		} );
+	</script>
+	<?php
+}
+
+add_action( 'wp_ajax_atk_instructor_fill_poi_course', 'atk_handle_instructor_fill_poi_course' );
+function atk_handle_instructor_fill_poi_course() {
+	atk_instructor_verify_request();
+	$result = ATK_Poi_Store::course_apply( ! empty( $_POST['replace'] ) );
+	atk_instructor_redirect_back( array(
+		'tab' => 'course', 'type' => 'poi', 'poi_fill' => 1,
+		'fill_created' => $result['weeks_created'], 'fill_filled' => $result['weeks_filled'],
+		'fill_replaced' => $result['weeks_replaced'], 'fill_kept' => $result['weeks_kept'], 'fill_q' => $result['questions'],
+	) );
 }
