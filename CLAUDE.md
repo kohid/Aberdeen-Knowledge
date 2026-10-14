@@ -181,7 +181,7 @@ the old `?tab=roads` still lands on Major Streets). Places of Interest is the on
 empty and the instructor imports the official sheet.
 
 - **Storage**: table `atk_poi_places` (`ATK_Poi_Store`): name, address, postcode, `street_answer`, one ward
-  (`neighbourhood_id`, a Neighbourhoods record, 0 for none), category, status (`current`/`closed`), notes, `lat`/`lng`
+  (`neighbourhood_id`, a Neighbourhoods record, 0 for none), category, status (`current`/`closed`), notes, `lat`/`lng`,
   `also_answers` (extra accepted streets, one per line in the column, up to 6, edited in the Edit place form) and `geo_state` (`none`, `looked_up`, `manual`, `not_found`). A slash is part of a ward name ("Airyhall/Broomhill/Garthdee"
   is one ward). The older typed POI questions (`quiz_poi_questions`, `course_poi_questions`) stay in the database untouched
   but the mockup test no longer reads `quiz_poi_questions`.
