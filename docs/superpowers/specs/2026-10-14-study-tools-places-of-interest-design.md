@@ -37,7 +37,7 @@ A new table, `atk_poi_places`, created through `db-schema.php` with `dbDelta` (t
 | `status` | `current` or `closed` |
 | `notes` | Free text, instructor only |
 | `lat`, `lng` | Pin position, or null |
-| `geo_state` | `looked_up`, `manual` or `none` |
+| `geo_state` | `none`, `looked_up`, `manual` or `not_found` (a lookup ran and nothing passed the rules; it is shown as "Not found" and is not retried until the instructor asks) |
 | `sort_order` | Keeps the sheet's row order |
 | `created_at`, `updated_at` | Timestamps |
 
@@ -53,7 +53,7 @@ A pure PHP file, `inc/poi-places-engine.php`, with no WordPress calls, tested li
 
 **Ward match.** A ward is compared after lower-casing and removing spaces around slashes, so "Midstocket / Rosemount" equals "Midstocket/Rosemount". A slash is part of the ward's name, not a separator: "Airyhall/Broomhill/Garthdee" is one ward, and a place has exactly one. No match means the row is marked "new ward" and the review offers "Create neighbourhood" per row. It is never created silently.
 
-**Street match.** From the Street cell the engine drops the postcode, drops house numbers and ranges such as "43-45", drops the filler parts "Aberdeen", "Scotland" and "United Kingdom" (the sheet has "52-60 Langstane Place, Aberdeen, Scotland, United Kingdom"), splits on commas and full stops, then tries each part from the right against the real road names, ignoring case and treating Rd/Road and St/Street alike. From the real sheet: "Rosemount viaduct" matches, "Old stoneywood church, Bankhead road, AB21 9HQ" matches Bankhead Road, and "Forresterhill" has no match and is marked "needs a street". A close lookalike is shown as a suggestion only.
+**Street match.** From the Street cell the engine drops the postcode, drops house numbers and ranges such as "43-45", drops the filler parts "Aberdeen", "Scotland" and "United Kingdom" (the sheet has "52-60 Langstane Place, Aberdeen, Scotland, United Kingdom"), splits on commas only (a full stop inside a part, as in "St. Machar Drive", is kept; only a trailing full stop or semicolon is trimmed), then tries each part from the right against the real road names, ignoring case and treating Rd/Road and St/Street alike. From the real sheet: "Rosemount viaduct" matches, "Old stoneywood church, Bankhead road, AB21 9HQ" matches Bankhead Road, and "Foresterhill" has no match and is marked "needs a street". A close lookalike is shown as a suggestion only.
 
 **Duplicates.** A place is the same place when its lower-cased name and its postcode agree. A file import updates the existing place (ward, address, street answer, category, status), blank cells never erase saved data, and a hand-placed pin is never overwritten.
 
@@ -61,9 +61,9 @@ A pure PHP file, `inc/poi-places-engine.php`, with no WordPress calls, tested li
 
 ## Pins
 
-After the import is saved, the instructor's browser looks each new or changed place up in OpenStreetMap through Nominatim, one place per second, with a progress bar. It tries the place name with its postcode first, then the address. A result is accepted only when all of these hold: it is a named feature, not a postcode, boundary or place-area centre; its type matches an amenity, tourism, leisure, shop, office, historic, education or building class; and it lies inside the Aberdeen area box (latitude 57.00 to 57.30, longitude -2.40 to -1.95, a named constant). The browser sends the result to the server, which checks the box again before storing it.
+After the import is saved, the instructor's browser looks each new or changed place up in OpenStreetMap through Nominatim, one place per second, with a progress bar. It tries the place name with its postcode first, then the address. A result is accepted only when all of these hold: it is a named feature, not a postcode, boundary or place-area centre; its OpenStreetMap class is one of amenity, tourism, leisure, shop, office, historic or building (schools, libraries, clubs and places of worship are all "amenity"); and it lies inside the Aberdeen area box (latitude 57.00 to 57.30, longitude -2.40 to -1.95, a named constant). The browser sends the result to the server, which checks the box again before storing it.
 
-A place with no accepted result keeps `geo_state` = `none`, appears on the dashboard as "No pin yet", and stays in the question bank and on the public list. Clicking "Place pin" in its edit window opens a small Leaflet map where the instructor clicks the spot, which stores `manual`. The public Nominatim server is for light use, so lookups run only for new or changed places, never for the whole list again.
+A place with no accepted result keeps `geo_state` = `none`, appears on the dashboard as "No pin yet", and stays in the question bank and on the public list. Clicking its pin badge in the list opens a small Leaflet map where the instructor clicks the spot, which stores `manual`. The public Nominatim server is for light use, so lookups run only for new or changed places, never for the whole list again.
 
 ## Instructor screen
 
@@ -97,7 +97,7 @@ Bump the plugin to 1.1.0 and tag it. The new table is created on update. After d
 
 ## Testing
 
-Plain PHP tests in `tests/places/` for the engine: header detection, ward matching with the real "Midstocket / Rosemount" variant, street matching on the sheet's real examples (including "Forresterhill" returning no match), duplicate handling, blank cells never erasing data, and the pin accept rule against saved sample responses. `php -l` and `node --check` on every changed file. Real screenshots of the Study Tools sub-tabs, the import review, the empty and filled public page, and the POI test on a Hello Elementor base, in light and dark mode and at phone width.
+Plain PHP tests in `tests/places/` for the engine: header detection, ward matching with the real "Midstocket / Rosemount" variant, street matching on the sheet's real examples (including "Foresterhill" returning no match), duplicate handling, blank cells never erasing data, and the pin accept rule against saved sample responses. `php -l` and `node --check` on every changed file. Real screenshots of the Study Tools sub-tabs, the import review, the empty and filled public page, and the POI test on a Hello Elementor base, in light and dark mode and at phone width.
 
 ## Assumptions to confirm
 

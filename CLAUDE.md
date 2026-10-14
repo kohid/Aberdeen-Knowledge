@@ -72,7 +72,11 @@ There is no build step or package manager in this repository. Verify changes wit
 - PHP: `php -l path/to/file.php`
 - JS: `node --check path/to/file.js`
 - Plain-PHP tests (no WordPress needed): `php tests/neighbourhoods/run-tests.php`,
-  `php tests/neighbourhoods/planner-tests.php`, `php tests/brand/run-tests.php`
+  `php tests/neighbourhoods/planner-tests.php`, `php tests/brand/run-tests.php`,
+  `php tests/places/run-tests.php`, `php tests/places/planner-tests.php`, `node tests/places/geo-tests.mjs`;
+  `bash tests/run-all.sh` runs all of them
+- Places of Interest checks that need WordPress: `ATK_WP_LOAD=/path/to/wp-load.php php tests/places/integration.php`
+  against a throwaway site with the plugin active. It creates its own rows (all named `ZZ-IT ...`) and removes them.
 - UI changes: take a real screenshot (headless Chromium against a throwaway or the live site) instead of assuming
   a CSS or layout fix worked.
 
@@ -107,6 +111,7 @@ New code added in the plugin era uses the `akn_` / `AKN_` prefix (brand, assets,
 - `study-tools.php`: the Study Tools grid
 - `instructor.php`, `instructor-roads.php`: the front-end Instructor Dashboard
 - `neighbourhoods.php`, `neighbourhoods-engine.php`: the dashboard's Neighbourhoods tab (see below)
+- `poi-places.php`, `poi-places-engine.php`: Study Tools > Places of Interest (see below)
 - `settings.php`: payment gateway config and the shortcode reference list, instructor-only
 - `theme-mode.php`, `icons.php`: dark/light mode and icon rendering
 - `demo.php`: generates and clears sample driver accounts for the dashboard's Demo tab
@@ -166,6 +171,33 @@ Builder.
   a comma. `assets/js/instructor-course-neighbourhoods.js` shows a live street count under each field (a street in two
   chosen neighbourhoods counts once) and a switch in the Street question form that narrows Road A and B.
 - **Tests**: `inc/neighbourhoods-engine.php` is pure PHP with tests in `tests/neighbourhoods/`.
+
+## Places of Interest
+
+The dashboard's **Study Tools** tab holds two sub-tabs, Major Streets and Places of Interest (`?tab=study-tools&tool=roads|poi`;
+the old `?tab=roads` still lands on Major Streets). Places of Interest is the one list behind the public
+`/places-of-interest/` map and the POI tests. The 87 built-in venues (`assets/data/poi.json`) were removed: the list starts
+empty and the instructor imports the official sheet.
+
+- **Storage**: table `atk_poi_places` (`ATK_Poi_Store`): name, address, postcode, `street_answer`, one ward
+  (`neighbourhood_id`, a Neighbourhoods record, 0 for none), category, status (`current`/`closed`), notes, `lat`/`lng`
+  and `geo_state` (`none`, `looked_up`, `manual`, `not_found`). A slash is part of a ward name ("Airyhall/Broomhill/Garthdee"
+  is one ward). The older typed POI questions (`quiz_poi_questions`, `course_poi_questions`) stay in the database untouched
+  but the mockup test no longer reads `quiz_poi_questions`.
+- **Import** (`inc/poi-places-engine.php`, pure PHP): columns Place of interest, Street/Address, Postcode, Ward, optional
+  Category, Status, Note. Same name and postcode is the same place (update, never a duplicate). Blank cells never erase
+  saved values; a saved street answer is never replaced by the sheet's automatic match. The street answer is matched
+  against the real road names from the address (right to left), never guessed; a close lookalike is only a suggestion.
+  A ward not on the site is created only when the review box is ticked (ticking one row creates it for every row naming it).
+  The server rebuilds the plan at save time.
+- **Pins**: the instructor's browser looks each new or changed place up through Nominatim (`assets/js/poi-geo.js` holds the
+  accept rules, one request a second, Aberdeen area box, named result, allowed OSM classes) and the server checks the box
+  again. Places without a pin can be placed by hand (`manual`, never replaced by a lookup). The public Nominatim server is for
+  light use.
+- **Dashboard order**: one section per ward, ordered by the Course Builder's weeks (poi-track weeks, then street-track weeks).
+- **Public**: `GET atk/v1/poi-venues` (cached one minute, `Cache-Control: public, max-age=60`) returns the pinned places; the map
+  page reads only that route. The POI test and the Course Builder POI picker read the saved places that are current and have
+  a street answer.
 
 ## Releases
 
