@@ -15,6 +15,7 @@ Decisions taken during brainstorming:
 3. Map pins come from an OpenStreetMap lookup with a confidence check. Places that fail it are still saved and listed, and can be pinned by hand.
 4. Category is an optional column. Rows without one are filed under Other Amenities and can be changed from a dropdown.
 5. The POI questions already typed into the database stay there, unused and hidden, until Jay asks for them to be deleted.
+6. The dashboard list is separated into one section per ward, ordered by the Course Builder's weeks (the order the wards are taught).
 
 ## Out of scope
 
@@ -68,7 +69,9 @@ A place with no accepted result keeps `geo_state` = `none`, appears on the dashb
 
 `?tab=study-tools&tool=roads` or `&tool=poi`. The sub-navigation uses the same line-tab style as the dashboard tabs. The old `?tab=roads` address, including `roads_search` and `roads_page`, keeps working and lands on the Major Streets sub-tab, and the two redirects in `inc/instructor-roads.php` are updated to the new address.
 
-Places of Interest is one card in the demo2 look: a toolbar with a search box, a ward filter, "Add place" and "Import spreadsheet", then a table that mirrors the sheet. Its first four columns are the sheet's, in the sheet's order and row order: Place of interest, Address, Postcode, Ward. They are followed by the street answer, a category badge, a pin badge (Pinned, Placed by hand, No pin yet), and edit and delete buttons. The sheet is alphabetical by place, not by ward, so the table is flat by default; the ward filter narrows it, and a "Group by ward" switch shows ward headings with a place count as a soft badge for anyone who wants that view. Add and edit share one modal with the ward as a dropdown of existing neighbourhoods, the category dropdown, status, notes and the pin picker. Import opens a drop zone and paste box, then the review table, then Save. The layout and badges copy the Neighbourhoods import so the two screens read as one family.
+Places of Interest is one card in the demo2 look: a toolbar with a search box, a ward filter, "Add place" and "Import spreadsheet", then the places, separated into one section per ward. Each section has a heading with the ward's name and its place count as a soft badge, and a table under it whose columns follow the sheet: Place of interest, Address, Postcode, then the street answer, a category badge, a pin badge (Pinned, Placed by hand, No pin yet), and edit and delete buttons. The Ward column is the section heading, so it is not repeated in each row. Inside a ward the places stay in the sheet's row order, which is alphabetical by place. A place with no ward sits in a last section called "No ward yet".
+
+The sections follow the order the wards are taught. The Course Builder's weeks decide it: wards in Week 1 come first, then Week 2's, and so on, and within a week in the order they are written in that week's Neighbourhoods field. A ward that appears in no week yet goes after those, alphabetically. A ward that appears in two weeks sits at its first week. The ward filter narrows the page to one ward, and a "Show as one list" switch gives the flat table, with the Ward column shown, for anyone who wants to scan the whole sheet. Add and edit share one modal with the ward as a dropdown of existing neighbourhoods, the category dropdown, status, notes and the pin picker. Import opens a drop zone and paste box, then the review table, then Save. The layout and badges copy the Neighbourhoods import so the two screens read as one family.
 
 REST routes under `atk/v1`, instructors and administrators only: `poi-places` (list, create, update, delete), `poi-places/preview` and `poi-places/commit` (import), and `poi-places/pin` (store a looked-up or hand-placed position).
 
