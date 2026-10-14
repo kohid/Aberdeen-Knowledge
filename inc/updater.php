@@ -17,6 +17,9 @@
  * made for a different repository, such as the old theme's, cannot read this
  * one.
  *
+ * Plugins, Aberdeen Knowledge row, "Check for updates" asks GitHub straight away
+ * instead of waiting for WordPress's 12 hour timer and our 6 hour cache.
+ *
  * Release flow: bump Version in aberdeen-knowledge.php, push a `vX.Y.Z` tag,
  * and .github/workflows/release.yml publishes the release.
  */
@@ -168,4 +171,92 @@ add_filter( 'upgrader_source_selection', function ( $source, $remote_source, $up
 
 add_action( 'upgrader_process_complete', function () {
 	delete_site_transient( AKN_RELEASE_TRANSIENT );
+} );
+
+
+/* -------------------------------------------------------------------- */
+/* "Check for updates" on the Plugins screen                              */
+/* -------------------------------------------------------------------- */
+
+/**
+ * What a check found, in words.
+ *
+ * @param array|false $release   Output of akn_get_latest_release(), or false when GitHub could not be read.
+ * @param string      $installed The installed version.
+ * @return array{state:string,message:string,version:string}
+ */
+function akn_update_status( $release, $installed ) {
+	if ( ! $release ) {
+		return array(
+			'state'   => 'unknown',
+			'version' => '',
+			'message' => 'Could not reach GitHub to look for a new version. Try again in a minute.',
+		);
+	}
+	if ( version_compare( $release['version'], $installed, '>' ) ) {
+		return array(
+			'state'   => 'available',
+			'version' => $release['version'],
+			'message' => sprintf( 'Version %s is available. You have %s.', $release['version'], $installed ),
+		);
+	}
+	return array(
+		'state'   => 'current',
+		'version' => $installed,
+		'message' => sprintf( 'Aberdeen Knowledge is up to date (version %s).', $installed ),
+	);
+}
+
+/** Asks GitHub now, drops the cached answers, and lets WordPress re-read its update list. */
+function akn_run_update_check() {
+	delete_site_transient( AKN_RELEASE_TRANSIENT );
+	delete_site_transient( 'update_plugins' );
+	$release = akn_get_latest_release( true );
+	if ( function_exists( 'wp_update_plugins' ) ) {
+		wp_update_plugins();
+	}
+	return akn_update_status( $release, ATK_VERSION );
+}
+
+add_filter( 'plugin_action_links_' . plugin_basename( ATK_PLUGIN_FILE ), function ( $links ) {
+	if ( ! current_user_can( 'update_plugins' ) ) {
+		return $links;
+	}
+	$url     = wp_nonce_url( admin_url( 'admin-post.php?action=akn_check_updates' ), 'akn_check_updates' );
+	$links[] = '<a href="' . esc_url( $url ) . '">Check for updates</a>';
+	return $links;
+} );
+
+add_action( 'admin_post_akn_check_updates', function () {
+	if ( ! current_user_can( 'update_plugins' ) ) {
+		wp_die( 'You are not allowed to update plugins.', 403 );
+	}
+	check_admin_referer( 'akn_check_updates' );
+	$status = akn_run_update_check();
+	wp_safe_redirect( add_query_arg(
+		array( 'akn_checked' => $status['state'], 'akn_version' => $status['version'] ),
+		admin_url( 'plugins.php' )
+	) );
+	exit;
+} );
+
+/** The result of the check, shown once at the top of the Plugins screen. */
+add_action( 'admin_notices', function () {
+	global $pagenow;
+	if ( 'plugins.php' !== $pagenow || empty( $_GET['akn_checked'] ) || ! current_user_can( 'update_plugins' ) ) { // phpcs:ignore WordPress.Security.NonceVerification
+		return;
+	}
+	$state   = sanitize_key( wp_unslash( $_GET['akn_checked'] ) ); // phpcs:ignore WordPress.Security.NonceVerification
+	$version = isset( $_GET['akn_version'] ) ? preg_replace( '/[^0-9A-Za-z.\-]/', '', wp_unslash( $_GET['akn_version'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification
+	if ( 'available' === $state ) {
+		$message = sprintf( 'Aberdeen Knowledge %s is available. Use Update now on its row below.', $version );
+		$class   = 'notice-warning';
+	} elseif ( 'current' === $state ) {
+		$message = sprintf( 'Aberdeen Knowledge is up to date (version %s).', $version );
+		$class   = 'notice-success';
+	} else {
+		$message = 'Could not reach GitHub to look for a new version. Try again in a minute.';
+		$class   = 'notice-error';
+	}
+	printf( '<div class="notice %s is-dismissible"><p>%s</p></div>', esc_attr( $class ), esc_html( $message ) );
 } );

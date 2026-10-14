@@ -75,6 +75,7 @@ There is no build step or package manager in this repository. Verify changes wit
   `php tests/neighbourhoods/planner-tests.php`, `php tests/brand/run-tests.php`,
   `php tests/places/run-tests.php`, `php tests/places/planner-tests.php`, `node tests/places/geo-tests.mjs`;
   `bash tests/run-all.sh` runs all of them
+- Updater check (`Check for updates` link on the Plugins row, GitHub stubbed): `ATK_WP_LOAD=/path/to/wp-load.php php tests/updater/integration.php`
 - Places of Interest checks that need WordPress: `ATK_WP_LOAD=/path/to/wp-load.php php tests/places/integration.php`
   against a throwaway site with the plugin active. It creates its own rows (all named `ZZ-IT ...`) and removes them.
 - UI changes: take a real screenshot (headless Chromium against a throwaway or the live site) instead of assuming
