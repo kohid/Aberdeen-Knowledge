@@ -170,6 +170,10 @@
 								"<div class=\"col-md-8\"><label class=\"form-label fw-semibold\" for=\"atk-poi-f-street\">Street answer</label>" +
 									"<input class=\"form-control form-control-solid\" id=\"atk-poi-f-street\" name=\"street_answer\" maxlength=\"255\" aria-describedby=\"atk-poi-f-street-help\">" +
 									"<div class=\"form-text\" id=\"atk-poi-f-street-help\">The street a driver must give in the test.</div></div>" +
+								"<div class=\"col-12\"><label class=\"form-label fw-semibold\" for=\"atk-poi-f-also\">Other accepted streets</label>" +
+									"<textarea class=\"form-control form-control-solid\" id=\"atk-poi-f-also\" name=\"also_answers\" rows=\"2\" aria-describedby=\"atk-poi-f-also-help\" placeholder=\"One street per line\"></textarea>" +
+									"<div class=\"form-text\" id=\"atk-poi-f-also-help\">For a place on a corner or with two entrances. A driver who gives any of these is marked right, as well as the street answer. Up to 6.</div>" +
+									"<div class=\"form-text text-gray-700 d-none\" id=\"atk-poi-f-research\"></div></div>" +
 								"<div class=\"col-md-6\"><label class=\"form-label fw-semibold\" for=\"atk-poi-f-ward\">Ward</label>" +
 									"<select class=\"form-select form-select-solid\" id=\"atk-poi-f-ward\" name=\"ward_id\"></select></div>" +
 								"<div class=\"col-md-6\"><label class=\"form-label fw-semibold\" for=\"atk-poi-f-category\">Category</label>" +
@@ -280,8 +284,10 @@
 	function row( item, withWard ) {
 		var p = item.place;
 		var closed = p.status === "closed" ? " " + badge( "Closed", "danger" ) : "";
+		var also = p.also_answers && p.also_answers.length ?
+			"<div class=\"text-gray-600 fs-7\">Also accepts " + esc( p.also_answers.join( ", " ) ) + "</div>" : "";
 		var street = p.street_answer ?
-			"<span class=\"text-gray-800\">" + esc( p.street_answer ) + "</span>" :
+			"<span class=\"text-gray-800\">" + esc( p.street_answer ) + "</span>" + also :
 			badge( "Needs a street", "warning" );
 		return "<tr>" +
 			"<td class=\"akn-poi-name\"><div class=\"fw-bold text-gray-900\">" + esc( p.name ) + closed + "</div>" +
@@ -386,6 +392,20 @@
 		$( "#atk-poi-f-category" ).value = place ? place.category : "Other Amenities";
 	}
 
+	/* What the researched-answers file already accepts for this place, shown under the box. */
+	function showResearch( place ) {
+		var box = $( "#atk-poi-f-research" );
+		var found = place && state.data.researched ? state.data.researched[ place.id ] : null;
+		if ( ! found ) {
+			box.classList.add( "d-none" );
+			box.textContent = "";
+			return;
+		}
+		var extra = found.also && found.also.length ? " Also accepted from research: " + found.also.join( ", " ) + "." : "";
+		box.textContent = "Checked answer: " + found.street + "." + extra + ( found.only ? " The sheet's own street is not accepted for this place." : "" );
+		box.classList.remove( "d-none" );
+	}
+
 	function openEdit( place ) {
 		state.editing = place || null;
 		$( "#atk-poi-edit-title" ).textContent = place ? "Edit place" : "Add place";
@@ -395,6 +415,8 @@
 		$( "#atk-poi-f-address" ).value = place ? place.address : "";
 		$( "#atk-poi-f-postcode" ).value = place ? place.postcode : "";
 		$( "#atk-poi-f-street" ).value = place ? place.street_answer : "";
+		$( "#atk-poi-f-also" ).value = place && place.also_answers ? place.also_answers.join( "\n" ) : "";
+		showResearch( place );
 		$( "#atk-poi-f-status" ).value = place ? place.status : "current";
 		$( "#atk-poi-f-notes" ).value = place ? place.notes : "";
 		modal( "atk-poi-edit-modal" ).show();
@@ -407,6 +429,7 @@
 			address: $( "#atk-poi-f-address" ).value,
 			postcode: $( "#atk-poi-f-postcode" ).value,
 			street_answer: $( "#atk-poi-f-street" ).value,
+			also_answers: $( "#atk-poi-f-also" ).value,
 			ward_id: parseInt( $( "#atk-poi-f-ward" ).value, 10 ) || 0,
 			category: $( "#atk-poi-f-category" ).value,
 			status: $( "#atk-poi-f-status" ).value,

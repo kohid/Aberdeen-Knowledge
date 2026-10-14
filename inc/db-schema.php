@@ -14,7 +14,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-const ATK_DB_VERSION = 5;
+const ATK_DB_VERSION = 6;
 
 function atk_table( $name ) {
 	global $wpdb;
@@ -160,6 +160,7 @@ function atk_maybe_install_db() {
 		address TEXT NULL,
 		postcode VARCHAR(12) NOT NULL DEFAULT '',
 		street_answer VARCHAR(255) NOT NULL DEFAULT '',
+		also_answers TEXT NULL,
 		neighbourhood_id BIGINT UNSIGNED NOT NULL DEFAULT 0,
 		category VARCHAR(60) NOT NULL DEFAULT 'Other Amenities',
 		status VARCHAR(10) NOT NULL DEFAULT 'current',

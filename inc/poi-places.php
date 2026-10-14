@@ -31,6 +31,7 @@ class ATK_Poi_Store {
 			'address'       => (string) $row->address,
 			'postcode'      => (string) $row->postcode,
 			'street_answer' => (string) $row->street_answer,
+			'also_answers'  => self::split_streets( isset( $row->also_answers ) ? $row->also_answers : '' ),
 			'ward_id'       => (int) $row->neighbourhood_id,
 			'category'      => (string) $row->category,
 			'status'        => (string) $row->status,
@@ -107,6 +108,36 @@ class ATK_Poi_Store {
 		return $sections;
 	}
 
+	const MAX_ALSO = 6;
+
+	/**
+	 * Extra accepted streets: one per line (or an array). Tidied, deduped without
+	 * regard to case or spacing, and the place's own street answer is dropped.
+	 *
+	 * @return string[]
+	 */
+	public static function split_streets( $value, $main = '' ) {
+		$lines = is_array( $value ) ? $value : preg_split( '/\R/u', (string) $value );
+		$seen  = array();
+		if ( '' !== trim( (string) $main ) ) {
+			$seen[ ATK_Nb_Parser::normalise_name( $main ) ] = true;
+		}
+		$out = array();
+		foreach ( (array) $lines as $line ) {
+			$line = self::tidy_text( $line, 255 );
+			$key  = ATK_Nb_Parser::normalise_name( $line );
+			if ( '' === $line || '' === $key || isset( $seen[ $key ] ) ) {
+				continue;
+			}
+			$seen[ $key ] = true;
+			$out[]        = $line;
+			if ( count( $out ) >= self::MAX_ALSO ) {
+				break;
+			}
+		}
+		return $out;
+	}
+
 	private static function tidy_text( $value, $max ) {
 		return mb_substr( trim( preg_replace( '/[ \t]+/u', ' ', (string) $value ) ), 0, $max, 'UTF-8' );
 	}
@@ -143,6 +174,11 @@ class ATK_Poi_Store {
 		}
 		if ( array_key_exists( 'street_answer', $fields ) ) {
 			$data['street_answer'] = self::tidy_text( $fields['street_answer'], 255 );
+		}
+		if ( array_key_exists( 'also_answers', $fields ) || array_key_exists( 'street_answer', $fields ) ) {
+			$main_street = array_key_exists( 'street_answer', $fields ) ? $data['street_answer'] : ( $current ? $current['street_answer'] : '' );
+			$source      = array_key_exists( 'also_answers', $fields ) ? $fields['also_answers'] : ( $current ? $current['also_answers'] : '' );
+			$data['also_answers'] = implode( "\n", self::split_streets( $source, $main_street ) );
 		}
 		if ( array_key_exists( 'ward_id', $fields ) ) {
 			$ward_id = (int) $fields['ward_id'];
@@ -581,8 +617,27 @@ function atk_poi_screen_data() {
 		'sections'   => ATK_Poi_Store::sections(),
 		'wards'      => $wards,
 		'categories' => ATK_Poi_Planner::CATEGORIES,
+		'researched' => atk_poi_researched_for( $places ),
 		'counts'     => array( 'total' => count( $places ), 'pinned' => $pinned, 'no_pin' => count( $places ) - $pinned ),
 	);
+}
+
+/** What the researched-answers file already accepts for each saved place: id => array( street, also, only, source ). */
+function atk_poi_researched_for( array $places ) {
+	$research = ATK_Poi_Store::course_research();
+	$out      = array();
+	foreach ( $places as $place ) {
+		$key = ATK_Poi_Planner::research_key( $place['name'], $place['postcode'] );
+		if ( isset( $research[ $key ] ) ) {
+			$out[ $place['id'] ] = array(
+				'street' => $research[ $key ]['street'],
+				'also'   => $research[ $key ]['also'],
+				'only'   => $research[ $key ]['only'],
+				'source' => $research[ $key ]['source'],
+			);
+		}
+	}
+	return (object) $out;
 }
 
 function atk_poi_rest_list() {
@@ -601,6 +656,10 @@ function atk_poi_rest_save( WP_REST_Request $request ) {
 		if ( null !== $request->get_param( $key ) ) {
 			$fields[ $key ] = sanitize_textarea_field( (string) $request->get_param( $key ) );
 		}
+	}
+	if ( null !== $request->get_param( 'also_answers' ) ) {
+		$raw = $request->get_param( 'also_answers' );
+		$fields['also_answers'] = is_array( $raw ) ? array_map( 'sanitize_text_field', $raw ) : implode( "\n", array_map( 'sanitize_text_field', preg_split( '/\R/u', (string) $raw ) ) );
 	}
 	if ( null !== $request->get_param( 'ward_id' ) ) {
 		$fields['ward_id'] = (int) $request->get_param( 'ward_id' );

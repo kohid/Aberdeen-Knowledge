@@ -1,5 +1,5 @@
 {
-  "about": "Street answers for Places of Interest that were checked against a real source. The Official POI test asks the street first, then accepts the others. An entry whose street matches the sheet is a confirmation, not a correction. Seaview Caravan Park has no named road in any source reachable during the check, so it has no entry and is left out of the test until an instructor gives it a street.",
+  "about": "Street answers for Places of Interest that were checked against a real source. The Official POI test asks the street first, then accepts the others. An entry whose street matches the sheet is a confirmation, not a correction. Seaview Caravan Park has no named road in any source reachable during the check, so it has no entry and is left out of the test until an instructor gives it a street. Second streets were looked for at about sixty larger or corner places. Only two were backed by a source (Aberdeen Art Gallery and Tolbooth Museum). The rest confirmed the single street on the sheet, including His Majesty's Theatre (Rosemount Viaduct, stage door on Skene Street), Tivoli Theatre, Station Hotel, Maritime Museum, St Mary's Cathedral, Satrosphere, The Gordon Highlanders' Museum and Beach Ballroom.",
   "checked": "2026-10-15",
   "places": [
     {
@@ -59,6 +59,26 @@
       "also": [],
       "source": "https://leonardohotels.co.uk/hotels/aberdeen/leonardo-aberdeen-airport/map",
       "note": "Confirms the sheet: Argyll Road, AB21 0AF. Argyll Way and Argyll Road share this postcode."
+    },
+    {
+      "name": "Aberdeen Art Gallery",
+      "postcode": "AB10 1FQ",
+      "street": "Schoolhill",
+      "also": [
+        "Blackfriars Street"
+      ],
+      "source": "https://britishlistedbuildings.co.uk/200354419-war-memorial-and-cowdray-hall-aberdeen-art-gallery-78-schoolhill-aberdeen-aberdeen",
+      "note": "The council gives Schoolhill. The listed building record is named \"Schoolhill and Blackfriars Street\", with the main front on Schoolhill and the west side on Blackfriars Street, so both are accepted."
+    },
+    {
+      "name": "Tolbooth Museum",
+      "postcode": "AB11 5BB",
+      "street": "Castle Street",
+      "also": [
+        "Castlegate"
+      ],
+      "source": "https://emuseum.aberdeencity.gov.uk/sites/233/aberdeen-townhouse",
+      "note": "The council's page for the Town House and Tolbooth places the entrance on the Castle Street frontage and says the Tolbooth has stood on the Castlegate since about 1393, so both are accepted."
     }
   ]
 }

@@ -182,7 +182,7 @@ empty and the instructor imports the official sheet.
 
 - **Storage**: table `atk_poi_places` (`ATK_Poi_Store`): name, address, postcode, `street_answer`, one ward
   (`neighbourhood_id`, a Neighbourhoods record, 0 for none), category, status (`current`/`closed`), notes, `lat`/`lng`
-  and `geo_state` (`none`, `looked_up`, `manual`, `not_found`). A slash is part of a ward name ("Airyhall/Broomhill/Garthdee"
+  `also_answers` (extra accepted streets, one per line in the column, up to 6, edited in the Edit place form) and `geo_state` (`none`, `looked_up`, `manual`, `not_found`). A slash is part of a ward name ("Airyhall/Broomhill/Garthdee"
   is one ward). The older typed POI questions (`quiz_poi_questions`, `course_poi_questions`) stay in the database untouched
   but the mockup test no longer reads `quiz_poi_questions`.
 - **Import** (`inc/poi-places-engine.php`, pure PHP): columns Place of interest, Street/Address, Postcode, Ward, optional
@@ -208,7 +208,7 @@ empty and the instructor imports the official sheet.
 - **Researched answers**: `assets/data/poi-research.json` holds streets checked against a real source (name, postcode,
   street, extra accepted spellings, source link, note). The researched street is asked first and the sheet's street is
   also accepted, unless the entry has `only: true`, which makes the researched street the single answer (Jay's ruling for
-  Old Blackfriars: Castle Street, and Linx Ice Arena: Beach Esplanade). Places with no street answer and no research (Seaview Caravan Park) are left out, never guessed.
+  Old Blackfriars: Castle Street, and Linx Ice Arena: Beach Esplanade). A place's own `also_answers` (typed in the Edit place form) are always accepted too, even for an `only` entry. The accepted list is: researched street, research `also`, the saved street (unless `only`), then the place's `also_answers`, without repeats. About sixty larger and corner places were checked for a second street; only Aberdeen Art Gallery (Blackfriars Street) and Tolbooth Museum (Castlegate) were backed by a source, the rest confirmed the sheet's single street. Weeks already made keep their copy of the answers, so after editing a place run the Official POI card again with "rewrite" ticked. Places with no street answer and no research (Seaview Caravan Park) are left out, never guessed.
 - **Public**: `GET atk/v1/poi-venues` (cached one minute, `Cache-Control: public, max-age=60`) returns the pinned places; the map
   page reads only that route. The POI test and the Course Builder POI picker read the saved places that are current and have
   a street answer.

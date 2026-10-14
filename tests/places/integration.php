@@ -155,7 +155,7 @@ t( 'updating a missing place is a 404', $missing->get_status(), 404 );
 
 $list = it_rest( 'GET', 'poi-places' );
 $data = $list->get_data();
-t( 'the list has sections, wards, categories and counts', array_keys( $data ), array( 'sections', 'wards', 'categories', 'counts' ) );
+t( 'the list has sections, wards, categories and counts', array_keys( $data ), array( 'sections', 'wards', 'categories', 'researched', 'counts' ) );
 t( 'counts add up', $data['counts']['total'], $data['counts']['pinned'] + $data['counts']['no_pin'] );
 t( 'the list offers eleven categories', count( $data['categories'] ), 11 );
 
@@ -460,6 +460,34 @@ foreach ( $created_wards as $wid ) {
 }
 ATK_Poi_Store::flush_cache();
 
+
+/* ---- extra accepted streets ---- */
+$p = ATK_Poi_Store::save( array( 'name' => 'ZZ-IT Extra Streets', 'postcode' => 'AB10 1FQ', 'street_answer' => 'Schoolhill', 'also_answers' => "Blackfriars Street\n castlegate \nCastlegate\nschoolhill\n\nBlackfriars  Street" ) );
+t( 'extra streets are tidied, deduped and the main street is dropped', $p['also_answers'], array( 'Blackfriars Street', 'castlegate' ) );
+$p2 = ATK_Poi_Store::save( array( 'notes' => 'changed' ), $p['id'] );
+t( 'saving other fields keeps the extra streets', $p2['also_answers'], array( 'Blackfriars Street', 'castlegate' ) );
+$p3 = ATK_Poi_Store::save( array( 'also_answers' => array( 'A One', 'B Two', 'C Three', 'D Four', 'E Five', 'F Six', 'G Seven' ) ), $p['id'] );
+t( 'at most six extra streets are kept', count( $p3['also_answers'] ), 6 );
+$p4 = ATK_Poi_Store::save( array( 'also_answers' => '' ), $p['id'] );
+t( 'an empty box clears the extra streets', $p4['also_answers'], array() );
+$req = new WP_REST_Request( 'POST', '/atk/v1/poi-places/' . $p['id'] );
+$req->set_url_params( array( 'id' => $p['id'] ) );
+$req->set_param( 'also_answers', "Blackfriars Street\nUnion Street" );
+$rest = atk_poi_rest_save( $req );
+t( 'the REST save takes extra streets one per line', $rest->get_data()['also_answers'], array( 'Blackfriars Street', 'Union Street' ) );
+$shown = array_values( array_filter( ATK_Poi_Store::labelled(), function ( $x ) use ( $p ) { return $x['id'] === $p['id']; } ) );
+t( 'the labelled list carries the extra streets for the planner', $shown[0]['also_answers'], array( 'Blackfriars Street', 'Union Street' ) );
+$res = ATK_Poi_Store::course_research();
+t( 'the researched Art Gallery lists Blackfriars Street as a second street', $res[ ATK_Poi_Planner::research_key( 'Aberdeen Art Gallery', 'AB10 1FQ' ) ]['also'], array( 'Blackfriars Street' ) );
+t( 'the researched Tolbooth Museum lists Castlegate as a second street', $res[ ATK_Poi_Planner::research_key( 'Tolbooth Museum', 'AB11 5BB' ) ]['also'], array( 'Castlegate' ) );
+$mk_art = ATK_Poi_Store::save( array( 'name' => 'ZZ-IT Art Gallery', 'postcode' => 'AB10 1FQ' ) );
+$none = (array) atk_poi_screen_data()['researched'];
+t( 'the screen data carries nothing for an unresearched place', isset( $none[ $mk_art['id'] ] ), false );
+$wpdb->update( atk_table( 'poi_places' ), array( 'name' => 'Aberdeen Art Gallery' ), array( 'id' => $mk_art['id'] ) );
+$seen = (array) atk_poi_screen_data()['researched'];
+t( 'the screen data tells the form what research already accepts', isset( $seen[ $mk_art['id'] ] ) ? $seen[ $mk_art['id'] ]['also'] : null, array( 'Blackfriars Street' ) );
+ATK_Poi_Store::delete( $mk_art['id'] );
+ATK_Poi_Store::delete( $p['id'] );
 
 /* ---- end ---- */
 it_clean();

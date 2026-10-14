@@ -310,7 +310,8 @@ class ATK_Poi_Planner {
 			$accepted = array();
 			$seen     = array();
 			$only    = ! empty( $found['street'] ) && ! empty( $found['only'] );
-			foreach ( array_merge( array( $first ), isset( $found['also'] ) ? (array) $found['also'] : array(), $only ? array() : array( $saved ) ) as $answer ) {
+			$typed   = isset( $place['also_answers'] ) ? (array) $place['also_answers'] : array();
+			foreach ( array_merge( array( $first ), isset( $found['also'] ) ? (array) $found['also'] : array(), $only ? array() : array( $saved ), $typed ) as $answer ) {
 				$norm = ATK_Nb_Parser::normalise_name( $answer );
 				if ( '' !== $norm && ! isset( $seen[ $norm ] ) ) {
 					$seen[ $norm ] = true;

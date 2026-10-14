@@ -143,6 +143,14 @@ $only_plan = ATK_Poi_Planner::course_plan( $places, array(
 	ATK_Poi_Planner::research_key( 'Old Blackfriars', 'AB11 5BB' ) => array( 'street' => 'Castle Street', 'only' => true, 'also' => array() ),
 ) );
 check( 'an only-research street is the single accepted answer', $only_plan['weeks'][7]['questions'][0]['accepted'], array( 'Castle Street' ) );
+$extra_places = $places;
+$extra_places[0]['also_answers'] = array( 'Castlegate', 'Union Street', 'union street', 'Castle Street' );
+$extra_plan = ATK_Poi_Planner::course_plan( $extra_places, $research );
+check( 'edited extra streets are accepted after the researched and saved ones, without repeats', $extra_plan['weeks'][7]['questions'][0]['accepted'], array( 'Castle Street', 'Castlegate', 'Union Street' ) );
+$extra_only = ATK_Poi_Planner::course_plan( $extra_places, array(
+	ATK_Poi_Planner::research_key( 'Old Blackfriars', 'AB11 5BB' ) => array( 'street' => 'Castle Street', 'only' => true, 'also' => array() ),
+) );
+check( 'extra streets the instructor adds are kept even when research is only', $extra_only['weeks'][7]['questions'][0]['accepted'], array( 'Castle Street', 'Castlegate', 'Union Street' ) );
 check( 'a ward spelled with spaces still lands in its week', $plan['weeks'][6]['questions'][0]['poi'], '22 CLUB' );
 check( 'an unresearched answer is just the saved street', $plan['weeks'][6]['questions'][0]['accepted'], array( 'ROSE STREET' ) );
 check( 'a place with no street answer is left out and named', $plan['weeks'][1]['no_answer'], array( 'Seaview Caravan Park' ) );
