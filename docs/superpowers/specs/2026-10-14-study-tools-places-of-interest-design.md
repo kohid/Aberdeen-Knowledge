@@ -4,7 +4,7 @@ Status: draft for review. No code has been written.
 
 ## What Jay asked for
 
-The Instructor Dashboard tab "Major Streets" becomes "Study Tools". Major Streets moves inside it as a sub-tab, and a new "Places of Interest" sub-tab sits beside it. Instructors add places by hand or import a spreadsheet (`.xlsx` or `.csv`) with the columns Place of interest, Street, Postcode and Ward, in ward order.
+The Instructor Dashboard tab "Major Streets" becomes "Study Tools". Major Streets moves inside it as a sub-tab, and a new "Places of Interest" sub-tab sits beside it. Instructors add places by hand or import a spreadsheet (`.xlsx` or `.csv`) that follows Jay's official sheet: the columns Place of interest, Street, Postcode and Ward, in the sheet's own row order. The sheet is the source of truth for the screen, the import and the saved data.
 
 The imported places are the only places of interest the site knows about. They replace the 87 built-in venues on `https://aberdeenknowledge.taxi/places-of-interest/`, and they become the question bank for the POI tests. Jay holds the official copy of the list and will import it himself.
 
@@ -37,7 +37,7 @@ A new table, `atk_poi_places`, created through `db-schema.php` with `dbDelta` (t
 | `notes` | Free text, instructor only |
 | `lat`, `lng` | Pin position, or null |
 | `geo_state` | `looked_up`, `manual` or `none` |
-| `sort_order` | Keeps the sheet's order within a ward |
+| `sort_order` | Keeps the sheet's row order |
 | `created_at`, `updated_at` | Timestamps |
 
 Categories are the existing eleven (Restaurants and Cafes, Hotels, Museums Arts & Culture, Sports Facilities, Schools Libraries & Learning, Community Centres, Religious Buildings & Cemeteries, Clubs & Members Clubs, Other Amenities, Living Spaces, Transport Hubs). The map legend already builds itself from the data, so nothing in the map script depends on this list.
@@ -48,11 +48,11 @@ Wards reuse Neighbourhoods, so a ward is never typed twice and the Course Builde
 
 A pure PHP file, `inc/poi-places-engine.php`, with no WordPress calls, tested like `neighbourhoods-engine.php`.
 
-**Input.** A pasted sheet or a read `.xlsx` or `.csv` (read in the browser with the bundled SheetJS). Columns are found by header name, ignoring case and spacing: Place of interest, Street, Postcode, Ward, and optionally Category, Status and Note. A row with no place name is skipped.
+**Input.** A pasted sheet or a read `.xlsx` or `.csv` (read in the browser with the bundled SheetJS). Columns are found by header name, ignoring case and spacing: Place of interest, Street, Postcode, Ward, and optionally Category, Status and Note. The sheet's Street column holds a full address (for example "His Majesty's Theatre, Rosemount viaduct, AB25 1GL"), so it is stored as the address and shown with the heading Address. A column headed Address is read the same way. A row with no place name is skipped.
 
-**Ward match.** A ward is compared after lower-casing and removing spaces around slashes, so "Midstocket / Rosemount" equals "Midstocket/Rosemount". No match means the row is marked "new ward" and the review offers "Create neighbourhood" per row. It is never created silently.
+**Ward match.** A ward is compared after lower-casing and removing spaces around slashes, so "Midstocket / Rosemount" equals "Midstocket/Rosemount". A slash is part of the ward's name, not a separator: "Airyhall/Broomhill/Garthdee" is one ward, and a place has exactly one. No match means the row is marked "new ward" and the review offers "Create neighbourhood" per row. It is never created silently.
 
-**Street match.** From the Street cell the engine drops the postcode, drops house numbers and ranges such as "43-45", splits on commas and full stops, then tries each part from the right against the real road names, ignoring case and treating Rd/Road and St/Street alike. From the real sheet: "Rosemount viaduct" matches, "Old stoneywood church, Bankhead road, AB21 9HQ" matches Bankhead Road, and "Forresterhill" has no match and is marked "needs a street". A close lookalike is shown as a suggestion only.
+**Street match.** From the Street cell the engine drops the postcode, drops house numbers and ranges such as "43-45", drops the filler parts "Aberdeen", "Scotland" and "United Kingdom" (the sheet has "52-60 Langstane Place, Aberdeen, Scotland, United Kingdom"), splits on commas and full stops, then tries each part from the right against the real road names, ignoring case and treating Rd/Road and St/Street alike. From the real sheet: "Rosemount viaduct" matches, "Old stoneywood church, Bankhead road, AB21 9HQ" matches Bankhead Road, and "Forresterhill" has no match and is marked "needs a street". A close lookalike is shown as a suggestion only.
 
 **Duplicates.** A place is the same place when its lower-cased name and its postcode agree. A file import updates the existing place (ward, address, street answer, category, status), blank cells never erase saved data, and a hand-placed pin is never overwritten.
 
@@ -68,7 +68,7 @@ A place with no accepted result keeps `geo_state` = `none`, appears on the dashb
 
 `?tab=study-tools&tool=roads` or `&tool=poi`. The sub-navigation uses the same line-tab style as the dashboard tabs. The old `?tab=roads` address, including `roads_search` and `roads_page`, keeps working and lands on the Major Streets sub-tab, and the two redirects in `inc/instructor-roads.php` are updated to the new address.
 
-Places of Interest is one card in the demo2 look: a toolbar with a search box, a ward filter, "Add place" and "Import spreadsheet", then a table grouped by ward in the sheet's order. A ward heading shows its name and place count as a soft badge. Rows show place, address, postcode, street answer, a category badge and a pin badge (Pinned, Placed by hand, No pin yet), with edit and delete buttons. Add and edit share one modal with the ward as a dropdown of existing neighbourhoods, the category dropdown, status, notes and the pin picker. Import opens a drop zone and paste box, then the review table, then Save. The layout and badges copy the Neighbourhoods import so the two screens read as one family.
+Places of Interest is one card in the demo2 look: a toolbar with a search box, a ward filter, "Add place" and "Import spreadsheet", then a table that mirrors the sheet. Its first four columns are the sheet's, in the sheet's order and row order: Place of interest, Address, Postcode, Ward. They are followed by the street answer, a category badge, a pin badge (Pinned, Placed by hand, No pin yet), and edit and delete buttons. The sheet is alphabetical by place, not by ward, so the table is flat by default; the ward filter narrows it, and a "Group by ward" switch shows ward headings with a place count as a soft badge for anyone who wants that view. Add and edit share one modal with the ward as a dropdown of existing neighbourhoods, the category dropdown, status, notes and the pin picker. Import opens a drop zone and paste box, then the review table, then Save. The layout and badges copy the Neighbourhoods import so the two screens read as one family.
 
 REST routes under `atk/v1`, instructors and administrators only: `poi-places` (list, create, update, delete), `poi-places/preview` and `poi-places/commit` (import), and `poi-places/pin` (store a looked-up or hand-placed position).
 
