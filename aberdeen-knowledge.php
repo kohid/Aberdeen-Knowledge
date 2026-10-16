@@ -3,7 +3,7 @@
  * Plugin Name:       Aberdeen Knowledge
  * Plugin URI:        https://github.com/kohid/Aberdeen-Knowledge
  * Description:       Taxi knowledge test preparation: Major Streets, Neighbourhoods and Places of Interest map tools, mockup tests, an Official Test course, driver and instructor accounts, and an Instructor Dashboard. Maps use Leaflet with OpenStreetMap. The brand colour is a setting.
- * Version:           1.5.1
+ * Version:           1.5.2
  * Requires at least: 6.0
  * Requires PHP:      7.4
  * Author:            Jay Miralles
@@ -13,7 +13,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'ATK_VERSION', '1.5.1' );
+define( 'ATK_VERSION', '1.5.2' );
 define( 'ATK_PLUGIN_FILE', __FILE__ );
 define( 'ATK_PLUGIN_DIR', untrailingslashit( plugin_dir_path( __FILE__ ) ) );
 define( 'ATK_PLUGIN_URI', untrailingslashit( plugin_dir_url( __FILE__ ) ) );

@@ -471,7 +471,7 @@
 				"Each right answer scores a point. Leave a box empty if you don&rsquo;t know that one.</div>";
 		}
 		html += '<div class="row g-5">' + routeColumnHtml( "from", "From", ends.from.length ) + routeColumnHtml( "to", "To", ends.to.length ) + "</div>" +
-			'<div class="form-text mt-2">You can give the two ends either way round.</div>';
+			'<div class="form-text mt-2">You can give the two ends either way round. If the street ends without joining another road, choose <strong>Dead end</strong> as that answer.</div>';
 		answerAreaEl.innerHTML = html;
 		[ [ "from", ends.from.length, "From" ], [ "to", ends.to.length, "To" ] ].forEach( function ( side ) {
 			var saved = [].concat( given[ side[ 0 ] ] || [] );
