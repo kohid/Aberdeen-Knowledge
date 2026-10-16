@@ -199,6 +199,39 @@ $wpdb->insert( atk_table( 'course_route_questions' ), array( 'week_id' => $week_
 ATK_Street_Store::course_apply( true );
 t( 'an old multiple-choice question is not deleted by a rewrite', (int) $wpdb->get_var( "SELECT COUNT(*) FROM " . atk_table( 'course_route_questions' ) . " WHERE from_place = 'ZZ-IT Old From'" ), 1 );
 
+/* ---- The Official Route test as the course reads it ---- */
+// Make test 1 of the week longer than 20 questions, before the course reads it (it caches per request).
+for ( $i = 1; $i <= 30; $i++ ) {
+	$wpdb->insert( atk_table( 'course_route_questions' ), array( 'week_id' => $week_id, 'test_number' => 1, 'from_place' => '', 'to_place' => '', 'options' => '[]', 'correct_index' => 0, 'street' => sprintf( 'ZZ-IT Extra %02d', $i ), 'pairs' => wp_json_encode( array( array( 'Alpha Road', 'Beta Street' ) ) ), 'sort_order' => 100 + $i ) );
+}
+$weeks    = atk_course_weeks( 'route' );
+$week_num = 0;
+foreach ( $weeks as $wi => $w ) {
+	if ( $w['id'] === $week_id ) {
+		$week_num = $wi + 1;
+	}
+}
+t( 'the course finds the week', $week_num > 0, true );
+$first = $weeks[ $week_num - 1 ]['tests'][0];
+$mine  = array_values( array_filter( $first, function ( $q ) { return 0 === strpos( $q['street'], 'ZZ-IT Extra' ) || 0 === stripos( $q['street'], 'Zz-It Route Street' ); } ) );
+t( 'a route question is a street with its pairs', array_keys( $mine[0] ), array( 'id', 'street', 'pairs' ) );
+t( 'the old multiple-choice row is not a question', count( array_filter( $first, function ( $q ) { return 'ZZ-IT Old From' === ( isset( $q['from'] ) ? $q['from'] : '' ) || '' === $q['street']; } ) ), 0 );
+$payload = atk_course_test_payload( 'route', $week_num, 1 );
+$extra   = array_values( array_filter( $payload, function ( $q ) { return false !== strpos( $q['prompt'], 'ZZ-IT Extra 01' ); } ) );
+t( 'the quiz question asks where the street runs from and to', $extra[0]['prompt'], 'Where does <strong>ZZ-IT Extra 01</strong> run from and to?' );
+t( 'the quiz question carries the pairs and no multiple choice', array( $extra[0]['pairs'], isset( $extra[0]['options'] ), isset( $extra[0]['locations'] ) ), array( array( array( 'Alpha Road', 'Beta Street' ) ), false, false ) );
+t( 'a test with more than 20 questions may report that many', atk_course_test_max_questions( 'route', $week_num, 1 ), count( $first ) );
+t( 'and lasts one minute a question', atk_course_test_minutes( 'route', $week_num, 1 ), count( $first ) );
+t( 'a short test keeps 20 questions and 20 minutes', array( atk_course_test_max_questions( 'route', $week_num, 2 ), atk_course_test_minutes( 'route', $week_num, 2 ) ), array( 20, 20 ) );
+t( 'the Street test keeps its 20 and 20', array( atk_course_test_max_questions( 'street', 1, 1 ), atk_course_test_minutes( 'street', 1, 1 ) ), array( 20, 20 ) );
+t( 'a saved review of the long test may hold all its answers', atk_attempt_limits( 'course-route-w' . $week_num . '-t1' ), array( 'questions' => max( 30, count( $first ) ), 'minutes' => count( $first ) ) );
+t( 'other tests keep 30 answers and 20 minutes', array( atk_attempt_limits( 'course-route-w' . $week_num . '-t2' ), atk_attempt_limits( 'course-w1-t1' ) ), array( array( 'questions' => 30, 'minutes' => 20 ), array( 'questions' => 30, 'minutes' => 20 ) ) );
+t( 'the course total counts the real route questions', atk_course_total_questions( 'route' ) >= count( $first ), true );
+ob_start();
+atk_render_course_test( 'route', $week_num, 1 );
+$html = ob_get_clean();
+t( 'the intro states the real question count and minutes', false !== strpos( $html, count( $first ) . ' questions &middot; ' . count( $first ) . ' minutes' ), true );
+
 // Cleanup.
 $wpdb->query( "DELETE FROM " . atk_table( 'course_route_questions' ) . " WHERE from_place = 'ZZ-IT Old From'" );
 $wpdb->query( "DELETE FROM " . atk_table( 'course_route_questions' ) . " WHERE week_id = $week_id AND street <> ''" );

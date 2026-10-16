@@ -881,6 +881,7 @@ function atk_render_instructor_course_tab() {
 	</div>
 
 	<?php if ( 'poi' === $type ) { atk_render_instructor_poi_course_card(); } ?>
+	<?php if ( 'route' === $type ) { atk_render_instructor_route_course_card(); } ?>
 
 	<div class="card mb-6">
 		<div class="card-header">
@@ -942,7 +943,7 @@ function atk_render_instructor_course_tab() {
 											<?php elseif ( 'poi' === $type ) : ?>
 												<th>Point of Interest</th><th>Accepted Answers</th>
 											<?php else : ?>
-												<th>From</th><th>To</th><th>Options</th>
+												<th>Street</th><th>Accepted From and To</th>
 											<?php endif; ?>
 											<th class="text-end">Actions</th>
 										</tr>
@@ -958,13 +959,8 @@ function atk_render_instructor_course_tab() {
 													<td><?php echo esc_html( $q['poi'] ); ?></td>
 													<td><?php echo esc_html( implode( ', ', $q['accepted'] ) ); ?></td>
 												<?php else : ?>
-													<td><?php echo esc_html( $q['from'] ); ?></td>
-													<td><?php echo esc_html( $q['to'] ); ?></td>
-													<td class="fs-7">
-														<?php foreach ( $q['options'] as $oi => $opt ) : ?>
-															<div class="<?php echo $oi === $q['correct'] ? 'text-success fw-bold' : ''; ?>"><?php echo esc_html( implode( ' → ', $opt ) ); ?><?php echo $oi === $q['correct'] ? ' ✓' : ''; ?></div>
-														<?php endforeach; ?>
-													</td>
+													<td><?php echo esc_html( $q['street'] ); ?></td>
+													<td class="fs-7"><?php echo esc_html( ATK_Route_Pairs::label_all( $q['pairs'] ) ); ?></td>
 												<?php endif; ?>
 												<td class="text-end">
 													<?php if ( 'street' === $type ) : ?>
@@ -978,12 +974,7 @@ function atk_render_instructor_course_tab() {
 															data-poi="<?php echo esc_attr( $q['poi'] ); ?>" data-accepted="<?php echo esc_attr( implode( ', ', $q['accepted'] ) ); ?>"
 															title="Edit"><i class="bi bi-pencil"></i></button>
 													<?php else : ?>
-														<button type="button" class="btn btn-sm btn-icon btn-light-primary atk-edit-course-route-question"
-															data-week-id="<?php echo esc_attr( $week['id'] ); ?>" data-test-number="<?php echo esc_attr( $t ); ?>" data-id="<?php echo esc_attr( $q['id'] ); ?>"
-															data-from="<?php echo esc_attr( $q['from'] ); ?>" data-to="<?php echo esc_attr( $q['to'] ); ?>"
-															data-options="<?php echo esc_attr( wp_json_encode( array_map( function ( $o ) { return implode( ' -> ', $o ); }, $q['options'] ) ) ); ?>"
-															data-correct="<?php echo esc_attr( $q['correct'] ); ?>"
-															title="Edit"><i class="bi bi-pencil"></i></button>
+														<a class="btn btn-sm btn-icon btn-light-primary" href="<?php echo esc_url( add_query_arg( array( 'tab' => 'streets', 'q' => $q['street'] ), atk_get_page_url( 'instructor-dashboard' ) ) ); ?>" title="Edit this street on the Streets tab"><i class="bi bi-pencil"></i></a>
 													<?php endif; ?>
 													<form method="post" action="<?php echo esc_url( admin_url( 'admin-ajax.php' ) ); ?>" class="d-inline">
 														<input type="hidden" name="action" value="atk_instructor_delete_course_question" />
@@ -999,9 +990,13 @@ function atk_render_instructor_course_tab() {
 									</tbody>
 								</table>
 							</div>
-							<button type="button" class="btn btn-sm btn-light-primary mb-6 atk-add-course-question" data-course-type="<?php echo esc_attr( $type ); ?>" data-week-id="<?php echo esc_attr( $week['id'] ); ?>" data-test-number="<?php echo esc_attr( $t ); ?>">
-								<i class="bi bi-plus-lg me-1"></i>Add Question to Test <?php echo esc_html( $t ); ?>
-							</button>
+							<?php if ( 'route' !== $type ) : ?>
+								<button type="button" class="btn btn-sm btn-light-primary mb-6 atk-add-course-question" data-course-type="<?php echo esc_attr( $type ); ?>" data-week-id="<?php echo esc_attr( $week['id'] ); ?>" data-test-number="<?php echo esc_attr( $t ); ?>">
+									<i class="bi bi-plus-lg me-1"></i>Add Question to Test <?php echo esc_html( $t ); ?>
+								</button>
+							<?php else : ?>
+								<div class="mb-6"></div>
+							<?php endif; ?>
 						<?php endfor; ?>
 
 						<div class="pt-2 border-top">
@@ -1085,49 +1080,6 @@ function atk_render_instructor_course_modals( $type ) {
 							</div>
 							<div class="mb-4"><label class="form-label">Point of Interest</label><?php echo atk_render_single_select( 'atk-cq-poi-poi', 'poi', atk_instructor_known_poi_names() ); ?><div class="form-text">Pick a saved place and its street fills in below. <a href="<?php echo esc_url( add_query_arg( array( 'tab' => 'study-tools', 'tool' => 'poi' ), atk_get_page_url( 'instructor-dashboard' ) ) ); ?>">Manage places</a></div></div>
 							<div class="mb-2"><label class="form-label">Accepted Answers</label><?php echo atk_render_tag_select( 'atk-cq-poi-accepted', 'accepted', atk_instructor_known_road_names() ); ?></div>
-						</div>
-						<div class="modal-footer">
-							<button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
-							<button type="submit" class="btn btn-primary">Save</button>
-						</div>
-					</form>
-				</div>
-			</div>
-		</div>
-	<?php else : ?>
-		<div class="modal fade" id="atk-course-question-modal" tabindex="-1" aria-hidden="true">
-			<div class="modal-dialog modal-dialog-centered modal-lg">
-				<div class="modal-content">
-					<form method="post" action="<?php echo esc_url( admin_url( 'admin-ajax.php' ) ); ?>">
-						<input type="hidden" name="action" value="atk_instructor_save_course_question" />
-						<input type="hidden" name="course_type" value="route" />
-						<input type="hidden" name="question_id" id="atk-cq-route-id" value="" />
-						<input type="hidden" name="week_id" id="atk-cq-route-week-id" value="" />
-						<input type="hidden" name="test_number" id="atk-cq-route-test-number" value="" />
-						<?php wp_nonce_field( ATK_INSTRUCTOR_NONCE_ACTION, 'atk_nonce' ); ?>
-						<div class="modal-header">
-							<h3 class="modal-title" id="atk-cq-route-title">Route Test Question</h3>
-							<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-						</div>
-						<div class="modal-body">
-							<div class="row g-4 mb-4">
-								<div class="col-md-6"><label class="form-label">From</label><?php echo atk_render_single_select( 'atk-cq-route-from', 'from_place', atk_instructor_known_road_names() ); ?></div>
-								<div class="col-md-6"><label class="form-label">To</label><?php echo atk_render_single_select( 'atk-cq-route-to', 'to_place', atk_instructor_known_road_names() ); ?></div>
-							</div>
-							<p class="fs-7 text-gray-500">Pick each option's roads in the order the route passes through them. Mark the correct one below.</p>
-							<?php for ( $i = 0; $i < 4; $i++ ) : ?>
-								<div class="mb-3 d-flex align-items-start gap-3">
-									<div class="form-check mt-2">
-										<input class="form-check-input" type="radio" name="correct_index" value="<?php echo esc_attr( $i ); ?>" id="atk-cq-route-correct-<?php echo esc_attr( $i ); ?>" <?php checked( 0 === $i ); ?> />
-									</div>
-									<div class="flex-grow-1">
-										<?php if ( $i >= 2 ) : ?>
-											<div class="fs-8 text-gray-500 mb-1">Option <?php echo esc_attr( $i + 1 ); ?> (optional)</div>
-										<?php endif; ?>
-										<?php echo atk_render_tag_select( 'atk-cq-route-option-' . $i, 'option_' . $i, atk_instructor_known_road_names() ); ?>
-									</div>
-								</div>
-							<?php endfor; ?>
 						</div>
 						<div class="modal-footer">
 							<button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>

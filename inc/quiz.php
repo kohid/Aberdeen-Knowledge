@@ -119,10 +119,18 @@ function atk_render_quiz( $key, $test = null, $questions = null, $extra = array(
 
 	atk_enqueue_leaflet();
 
-	wp_enqueue_script( 'atk-quiz', ATK_PLUGIN_URI . '/assets/js/quiz.js', array( 'atk-scripts-bundle', 'leaflet' ), filemtime( ATK_PLUGIN_DIR . '/assets/js/quiz.js' ), true );
+	$minutes = isset( $test['minutes'] ) ? max( 1, (int) $test['minutes'] ) : ATK_QUIZ_MINUTES;
+
+	// The Official Route test marks a typed From and To; the browser applies the same rules as ATK_Route_Pairs.
+	$quiz_deps = array( 'atk-scripts-bundle', 'leaflet' );
+	if ( 'pair' === $test['mode'] ) {
+		wp_enqueue_script( 'atk-route-pairs', ATK_PLUGIN_URI . '/assets/js/route-pairs.js', array(), filemtime( ATK_PLUGIN_DIR . '/assets/js/route-pairs.js' ), true );
+		$quiz_deps[] = 'atk-route-pairs';
+	}
+	wp_enqueue_script( 'atk-quiz', ATK_PLUGIN_URI . '/assets/js/quiz.js', $quiz_deps, filemtime( ATK_PLUGIN_DIR . '/assets/js/quiz.js' ), true );
 	wp_add_inline_script( 'atk-quiz', 'var ATK_QUIZ = ' . wp_json_encode( array_merge( array(
 		'mode'            => $test['mode'],
-		'minutes'         => ATK_QUIZ_MINUTES,
+		'minutes'         => $minutes,
 		'questions'       => $questions,
 		'passThreshold'   => ATK_QUIZ_PASS_THRESHOLD,
 		'testKey'         => $key,
@@ -135,12 +143,14 @@ function atk_render_quiz( $key, $test = null, $questions = null, $extra = array(
 		// Real Aberdeen street names (inc/road-names-data.php), offered as
 		// suggestions while typing a text-mode answer so a driver who knows
 		// the right street isn't marked wrong for a stray typo — only sent
-		// for text-mode tests (Street/POI), never for Route's multiple choice.
-		'roadNames'       => 'text' === $test['mode'] ? atk_master_road_names() : array(),
+		// for the typed-answer tests (Street/POI, and the Route test's From and To),
+		// never for multiple choice.
+		'roadNames'       => in_array( $test['mode'], array( 'text', 'pair' ), true ) ? atk_master_road_names() : array(),
 	), $extra ) ) . ';', 'before' );
 
 	$is_study        = ! empty( $test['instantFeedback'] );
-	$question_count  = isset( $test['sessionSize'] ) ? (int) $test['sessionSize'] : ATK_QUIZ_QUESTION_COUNT;
+	// A test with no session size asks every question it holds (the quiz engine does the same).
+	$question_count  = isset( $test['sessionSize'] ) ? (int) $test['sessionSize'] : count( $questions );
 	// A bank smaller than a full session (a new site with few places, say) never promises more questions than it has.
 	$question_count  = min( $question_count, count( $questions ) );
 	$hub_key         = isset( $test['hub_key'] ) ? $test['hub_key'] : 'study-tools';
@@ -160,7 +170,7 @@ function atk_render_quiz( $key, $test = null, $questions = null, $extra = array(
 					<h1 class="fs-2x fw-bolder text-gray-900 mb-3"><?php echo esc_html( $test['title'] ); ?></h1>
 					<p class="fs-5 text-gray-600 mb-2"><?php echo esc_html( $test['instruction'] ); ?></p>
 					<?php if ( $questions ) : ?>
-						<p class="fs-6 text-gray-500 mb-8"><?php echo esc_html( $question_count ); ?> questions &middot; <?php echo esc_html( ATK_QUIZ_MINUTES ); ?> minutes</p>
+						<p class="fs-6 text-gray-500 mb-8"><?php echo esc_html( $question_count ); ?> questions &middot; <?php echo esc_html( $minutes ); ?> minutes</p>
 						<button type="button" class="btn btn-lg btn-primary" id="atk-quiz-start"><?php echo $is_study ? 'Start Studying' : 'Start Test'; ?></button>
 					<?php else : ?>
 						<p class="fs-6 text-gray-600 mb-0" id="atk-quiz-empty" role="status"><?php echo 'poi' === $key ? 'Places of interest will appear here once an instructor imports them.' : 'There are no questions in this test yet.'; ?></p>

@@ -38,7 +38,7 @@ Status of a street: **Needs clarification** (flag set), else **Needs answer** (n
 
 - One week per official ward, 13 weeks in official order (`ATK_Poi_Planner::OFFICIAL_WARDS`), as the POI test does.
 - A ward's ready streets (listed, not flagged, at least one pair) are sorted A to Z and divided evenly into the week's 5 tests, so each is asked once. The first `n mod 5` tests get one extra. A street in two wards is asked in both weeks.
-- Streets with no official ward are reported as left out, never guessed. Flagged streets and streets without a pair are listed in the preview.
+- Ward names are matched ignoring case, spaces around slashes and St = Street ("George St/Harbour" is the official "George Street/Harbour"). Streets with no official ward are reported as left out, never guessed. Flagged streets and streets without a pair are listed in the preview.
 - A test's time is `max(20, number of questions)` minutes, and the pass mark stays 75 percent.
 - The Course Builder Route tab gets a card, "Fill the Official Route test from your streets", with a preview and a "rewrite" tick. Weeks that already hold questions are untouched unless "rewrite" is ticked. Nothing else is deleted.
 - The quiz shows two boxes (From, To) for pair questions. The review shows every accepted pair.

@@ -28,10 +28,19 @@
 		clarify: { label: "Needs clarification", tone: "danger" }
 	};
 
+	/** A link from the Course Builder (?tab=streets&q=Street name) opens the list already searched. */
+	function initialSearch() {
+		try {
+			return new URLSearchParams( window.location.search ).get( "q" ) || "";
+		} catch ( e ) {
+			return "";
+		}
+	}
+
 	var state = {
 		data: null,
 		view: "alphabetical",
-		search: "",
+		search: initialSearch(),
 		status: "",
 		ward: "",
 		editing: null,
@@ -161,7 +170,7 @@
 						"<li class=\"nav-item\" role=\"presentation\"><button type=\"button\" class=\"nav-link\" role=\"tab\" data-act=\"view\" data-view=\"ward\" id=\"atk-streets-tab-w\">By ward</button></li>" +
 					"</ul>" +
 					"<div class=\"d-flex flex-wrap align-items-center gap-4 mb-5\">" +
-						"<input id=\"atk-streets-search\" class=\"form-control form-control-solid akn-streets-filter\" type=\"search\" placeholder=\"Search streets, postcodes or answers\" aria-label=\"Search streets\">" +
+						"<input id=\"atk-streets-search\" class=\"form-control form-control-solid akn-streets-filter\" type=\"search\" value=\"" + esc( state.search ) + "\" placeholder=\"Search streets, postcodes or answers\" aria-label=\"Search streets\">" +
 						"<select id=\"atk-streets-status-filter\" class=\"form-select form-select-solid akn-streets-filter\" aria-label=\"Show streets by status\">" +
 							"<option value=\"\">All streets</option>" +
 							"<option value=\"ready\">Ready</option>" +

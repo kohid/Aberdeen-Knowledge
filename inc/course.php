@@ -95,7 +95,9 @@ function atk_course_track_attempts( $user_id, $type ) {
  * 'id', 'neighbourhoods' (array of strings) and 'tests' (array of
  * ATK_COURSE_TESTS_PER_WEEK question lists). A question's shape depends on
  * $type: street => array('id','a','b','accepted'), poi => array('id','poi',
- * 'accepted'), route => array('id','from','to','options','correct').
+ * 'accepted'), route => array('id','street','pairs') where 'pairs' is a list of
+ * array(from, to) answers (the Official Route test; the older multiple choice
+ * rows stay in the table but are not read here).
  */
 function atk_course_weeks( $type = 'street' ) {
 	global $wpdb;
@@ -136,14 +138,15 @@ function atk_course_weeks( $type = 'street' ) {
 				if ( ! isset( $tests[ (int) $q->test_number ] ) ) { continue; }
 				$tests[ (int) $q->test_number ][] = array( 'id' => (int) $q->id, 'poi' => $q->poi, 'accepted' => json_decode( $q->accepted, true ) );
 			}
-		} else { // route
+		} else { // route: a street, answered by typing where it runs From and To
 			$question_rows = $wpdb->get_results( $wpdb->prepare(
-				"SELECT id, test_number, from_place, to_place, options, correct_index FROM $questions_table WHERE week_id = %d ORDER BY test_number ASC, sort_order ASC, id ASC",
+				"SELECT id, test_number, street, pairs FROM $questions_table WHERE week_id = %d AND street <> '' ORDER BY test_number ASC, sort_order ASC, id ASC",
 				$week_row->id
 			) );
 			foreach ( $question_rows as $q ) {
 				if ( ! isset( $tests[ (int) $q->test_number ] ) ) { continue; }
-				$tests[ (int) $q->test_number ][] = array( 'id' => (int) $q->id, 'from' => $q->from_place, 'to' => $q->to_place, 'options' => json_decode( $q->options, true ), 'correct' => (int) $q->correct_index );
+				$pairs = json_decode( (string) $q->pairs, true );
+				$tests[ (int) $q->test_number ][] = array( 'id' => (int) $q->id, 'street' => $q->street, 'pairs' => is_array( $pairs ) ? $pairs : array() );
 			}
 		}
 
@@ -261,12 +264,60 @@ function atk_handle_course_complete() {
 
 	$total = isset( $_POST['total'] ) ? (int) $_POST['total'] : 0;
 	$score = isset( $_POST['score'] ) ? (int) $_POST['score'] : 0;
-	$total = max( 0, min( ATK_COURSE_QUESTIONS_PER_TEST, $total ) );
+	$total = max( 0, min( atk_course_test_max_questions( $type, $week_num, $test_num ), $total ) );
 	$score = max( 0, min( $total, $score ) );
 
 	atk_course_record_result( $user_id, $type, $week_num, $test_num, $score, $total );
 
 	wp_send_json_success();
+}
+
+/** One line per track, shown on the catalog card and on the test's intro screen. */
+function atk_course_instructions() {
+	return array(
+		'street' => 'Name a connecting road between two roads.',
+		'poi'    => "Name the street where you'll find these places of interest.",
+		'route'  => 'Type the two roads each street runs from and to.',
+	);
+}
+
+/**
+ * How many questions a course test can hold. The Street and Place of Interest tests are
+ * capped at ATK_COURSE_QUESTIONS_PER_TEST; the Official Route test asks every street of
+ * a ward, so its tests are as long as the questions actually saved in them.
+ */
+function atk_course_test_max_questions( $type, $week_num, $test_num ) {
+	$type = atk_course_type_or_default( $type );
+	if ( 'route' !== $type ) {
+		return ATK_COURSE_QUESTIONS_PER_TEST;
+	}
+	$weeks = atk_course_weeks( 'route' );
+	$count = isset( $weeks[ $week_num - 1 ]['tests'][ $test_num - 1 ] ) ? count( $weeks[ $week_num - 1 ]['tests'][ $test_num - 1 ] ) : 0;
+	return max( ATK_COURSE_QUESTIONS_PER_TEST, $count );
+}
+
+/** Questions in a whole track: 20 a test, or the questions really saved for the Official Route test. */
+function atk_course_total_questions( $type ) {
+	$type = atk_course_type_or_default( $type );
+	if ( 'route' !== $type ) {
+		return atk_course_total_weeks( $type ) * ATK_COURSE_TESTS_PER_WEEK * ATK_COURSE_QUESTIONS_PER_TEST;
+	}
+	$total = 0;
+	foreach ( atk_course_weeks( 'route' ) as $week ) {
+		foreach ( $week['tests'] as $test ) {
+			$total += count( $test );
+		}
+	}
+	return $total;
+}
+
+/** Minutes allowed for one course test: 20, or one per question when the Official Route test has more than 20. */
+function atk_course_test_minutes( $type, $week_num, $test_num ) {
+	$type = atk_course_type_or_default( $type );
+	if ( 'route' !== $type ) {
+		return ATK_QUIZ_MINUTES;
+	}
+	return ATK_Route_Planner::minutes( atk_course_test_max_questions( $type, $week_num, $test_num ) );
 }
 
 /**
@@ -303,18 +354,11 @@ function atk_course_test_payload( $type, $week_num, $test_num ) {
 		}, $rows );
 	}
 
-	// route
+	// route: the street is the question; the student types where it runs From and To.
 	return array_map( function ( $q ) {
 		return array(
-			'prompt'    => sprintf( 'Which route correctly connects <strong>%s</strong> to <strong>%s</strong>?', esc_html( $q['from'] ), esc_html( $q['to'] ) ),
-			'options'   => array_map( function ( $route ) {
-				return implode( ' &rarr; ', array_map( 'esc_html', $route ) );
-			}, $q['options'] ),
-			'correct'   => (int) $q['correct'],
-			'locations' => array(
-				array( 'label' => 'S', 'query' => $q['from'] ),
-				array( 'label' => 'E', 'query' => $q['to'] ),
-			),
+			'prompt' => sprintf( 'Where does <strong>%s</strong> run from and to?', esc_html( $q['street'] ) ),
+			'pairs'  => $q['pairs'],
 		);
 	}, $rows );
 }
@@ -352,18 +396,15 @@ function atk_render_course_test( $type, $week_num, $test_num ) {
 	}
 
 	$labels       = atk_course_types();
-	$instructions = array(
-		'street' => 'Name a connecting road between two roads.',
-		'poi'    => "Name the street where you'll find these places of interest.",
-		'route'  => 'Pick the road sequence that forms the correct route.',
-	);
-	$modes = array( 'street' => 'text', 'poi' => 'text', 'route' => 'choice' );
+	$instructions = atk_course_instructions();
+	$modes = array( 'street' => 'text', 'poi' => 'text', 'route' => 'pair' );
 
 	$test = array(
 		'title'       => $labels[ $type ]['label'] . ' &mdash; Week ' . $week_num . ', Test ' . $test_num,
 		'heading'     => atk_course_track_name( $type ) . ' Official Test',
 		'instruction' => $instructions[ $type ],
 		'mode'        => $modes[ $type ],
+		'minutes'     => atk_course_test_minutes( $type, $week_num, $test_num ),
 		'hub_key'     => 'official-test-course',
 		'hub_label'   => 'Back to Course',
 		'real_data'   => true,
@@ -962,7 +1003,7 @@ function atk_course_price_html( $type ) {
  */
 function atk_render_course_catalog() {
 	$types         = atk_course_types();
-	$test_labels   = atk_quiz_tests(); // reuses the real per-track instruction copy, not a duplicate
+	$test_labels   = atk_course_instructions(); // the official tests' own instruction copy (the Route test is typed, not multiple choice)
 	$is_logged_in  = is_user_logged_in();
 	$user_id       = $is_logged_in ? get_current_user_id() : 0;
 
@@ -988,7 +1029,7 @@ function atk_render_course_catalog() {
 				$enrolled    = $is_logged_in && atk_course_is_enrolled( $user_id, $tkey );
 				$role        = $card_roles[ $tkey ];
 				$total_tests = atk_course_total_weeks( $tkey ) * ATK_COURSE_TESTS_PER_WEEK;
-				$total_qs    = $total_tests * ATK_COURSE_QUESTIONS_PER_TEST;
+				$total_qs    = atk_course_total_questions( $tkey );
 				?>
 				<div class="col-md-4">
 					<div class="atk-course-card bg-light-<?php echo esc_attr( $role ); ?> p-6 h-100 d-flex flex-column" style="border-radius:1.25rem;">
@@ -1004,7 +1045,7 @@ function atk_render_course_catalog() {
 						</div>
 
 						<h3 class="fs-3 fw-boldest text-gray-900 mb-2"><?php echo esc_html( atk_course_track_name( $tkey ) . ' Official Test' ); ?></h3>
-						<p class="fs-7 text-gray-700 mb-5 flex-grow-1"><?php echo esc_html( $test_labels[ $tkey ]['instruction'] ); ?></p>
+						<p class="fs-7 text-gray-700 mb-5 flex-grow-1"><?php echo esc_html( $test_labels[ $tkey ] ); ?></p>
 
 						<div class="d-flex align-items-center gap-4 fs-8 text-gray-700 fw-semibold mb-5">
 							<span><i class="bi bi-question-circle me-1"></i><?php echo esc_html( number_format_i18n( $total_qs ) ); ?> questions</span>

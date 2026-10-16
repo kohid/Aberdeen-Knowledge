@@ -84,11 +84,11 @@ class ATK_Street_Store {
 	public static function wards() {
 		$official = array();
 		foreach ( ATK_Poi_Planner::OFFICIAL_WARDS as $i => $name ) {
-			$official[ ATK_Poi_Parser::ward_key( $name ) ] = $i + 1;
+			$official[ ATK_Route_Planner::ward_match_key( $name ) ] = $i + 1;
 		}
 		$out = array();
 		foreach ( ATK_Nb_Store::neighbourhoods() as $id => $item ) {
-			$key   = ATK_Poi_Parser::ward_key( $item['name'] );
+			$key   = ATK_Route_Planner::ward_match_key( $item['name'] );
 			$out[] = array( 'id' => (int) $id, 'name' => $item['name'], 'official' => isset( $official[ $key ] ) ? $official[ $key ] : 0 );
 		}
 		usort( $out, function ( $a, $b ) {
@@ -419,7 +419,7 @@ class ATK_Street_Store {
 		$out  = array();
 		foreach ( (array) $rows as $row ) {
 			$count = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM " . atk_table( 'course_route_questions' ) . " WHERE week_id = %d AND street <> ''", $row->id ) );
-			$key   = ATK_Poi_Parser::ward_key( $row->neighbourhoods );
+			$key   = ATK_Route_Planner::ward_match_key( $row->neighbourhoods );
 			if ( ! isset( $out[ $key ] ) ) {
 				$out[ $key ] = array( 'id' => (int) $row->id, 'week_number' => (int) $row->week_number, 'neighbourhoods' => $row->neighbourhoods, 'questions' => $count );
 			}
@@ -432,7 +432,7 @@ class ATK_Street_Store {
 		$plan     = ATK_Route_Planner::course_plan( self::course_streets(), ATK_Poi_Planner::OFFICIAL_WARDS );
 		$existing = self::existing_course_weeks();
 		foreach ( $plan['weeks'] as $i => $week ) {
-			$have = isset( $existing[ ATK_Poi_Parser::ward_key( $week['ward'] ) ] ) ? $existing[ ATK_Poi_Parser::ward_key( $week['ward'] ) ] : null;
+			$have = isset( $existing[ ATK_Route_Planner::ward_match_key( $week['ward'] ) ] ) ? $existing[ ATK_Route_Planner::ward_match_key( $week['ward'] ) ] : null;
 			if ( ! $week['questions'] ) {
 				$state = 'nothing';
 			} elseif ( ! $have ) {
@@ -461,7 +461,7 @@ class ATK_Street_Store {
 		$result = array( 'weeks_created' => 0, 'weeks_filled' => 0, 'weeks_kept' => 0, 'weeks_replaced' => 0, 'questions' => 0 );
 		$names  = array();
 		foreach ( ATK_Nb_Store::neighbourhoods() as $item ) {
-			$names[ ATK_Poi_Parser::ward_key( $item['name'] ) ] = $item['name'];
+			$names[ ATK_Route_Planner::ward_match_key( $item['name'] ) ] = $item['name'];
 		}
 		$plan  = self::course_preview();
 		$order = (int) $wpdb->get_var( "SELECT MAX(sort_order) FROM " . atk_table( 'course_weeks' ) . " WHERE course_type = 'route'" );
@@ -475,7 +475,7 @@ class ATK_Street_Store {
 			}
 			$week_id = $week['existing_week_id'];
 			if ( 'new' === $week['state'] ) {
-				$key = ATK_Poi_Parser::ward_key( $week['ward'] );
+				$key = ATK_Route_Planner::ward_match_key( $week['ward'] );
 				$order++;
 				$wpdb->insert( atk_table( 'course_weeks' ), array(
 					'course_type'    => 'route',
@@ -611,4 +611,166 @@ function atk_render_instructor_streets_tab() {
 	?>
 	<div id="atk-streets-root"><p class="text-gray-600">Loading streets&hellip;</p></div>
 	<?php
+}
+
+/* -------------------------------------------------------------------- */
+/* Course Builder: Fill the Official Route test                         */
+/* -------------------------------------------------------------------- */
+
+/** "40 streets, 8 in each of 5 tests" for the preview. */
+function atk_route_course_per_test_text( $asked, array $tests ) {
+	$sizes = array_map( 'count', $tests );
+	if ( ! $sizes ) {
+		return '';
+	}
+	$min = min( $sizes );
+	$max = max( $sizes );
+	return $min === $max ? sprintf( '%d in each of 5 tests', $max ) : sprintf( '%d to %d in each of 5 tests', $min, $max );
+}
+
+/**
+ * The card at the top of the Course Builder's Route Test track: a preview of the 13 weeks
+ * (one per Aberdeen City Council ward, in ward order) and the button that fills them.
+ * Weeks that already hold questions are kept unless "rewrite" is ticked.
+ */
+function atk_render_instructor_route_course_card() {
+	$plan    = ATK_Street_Store::course_preview();
+	$streets = 0;
+	foreach ( $plan['weeks'] as $week ) {
+		$streets += count( $week['questions'] );
+	}
+	$badges = array(
+		'new'     => array( 'badge-light-primary', 'New week' ),
+		'empty'   => array( 'badge-light-warning', 'Empty week, will be filled' ),
+		'nothing' => array( 'badge-light-secondary', 'No streets ready' ),
+	);
+	$streets_tab = add_query_arg( 'tab', 'streets', atk_get_page_url( 'instructor-dashboard' ) );
+	?>
+	<div class="card mb-6" id="atk-route-course-card">
+		<div class="card-header">
+			<h2 class="card-title fs-4">Fill the Official Route test from your streets</h2>
+		</div>
+		<div class="card-body">
+			<p class="text-gray-600 mb-3">Each street is one question: the student types where it runs From and To. There is one week for each of the 13 wards of Aberdeen City Council, in the council's order; a ward with no ready street gets no week until it has one. A ward's ready streets are divided over its five tests, so every ready street is asked once and the tests are never cut to 20. A test lasts 20 minutes, or one minute a question when it has more than 20.</p>
+			<p class="text-gray-600 mb-5">A street is ready when it has at least one From and To pair and is not marked <em>Needs clarification</em>. Type the pairs on the <a href="<?php echo esc_url( $streets_tab ); ?>">Streets tab</a>. The mockup Route Test is not changed.</p>
+
+			<?php if ( isset( $_GET['route_fill'] ) ) : // phpcs:ignore WordPress.Security.NonceVerification ?>
+				<div class="alert alert-success d-flex align-items-center p-5 mb-6"><span>
+					<?php
+					printf(
+						'Done. %1$d weeks created, %2$d empty weeks filled, %3$d weeks rewritten, %4$d weeks kept as they were. %5$d questions saved.',
+						isset( $_GET['fill_created'] ) ? (int) $_GET['fill_created'] : 0, // phpcs:ignore WordPress.Security.NonceVerification
+						isset( $_GET['fill_filled'] ) ? (int) $_GET['fill_filled'] : 0, // phpcs:ignore WordPress.Security.NonceVerification
+						isset( $_GET['fill_replaced'] ) ? (int) $_GET['fill_replaced'] : 0, // phpcs:ignore WordPress.Security.NonceVerification
+						isset( $_GET['fill_kept'] ) ? (int) $_GET['fill_kept'] : 0, // phpcs:ignore WordPress.Security.NonceVerification
+						isset( $_GET['fill_q'] ) ? (int) $_GET['fill_q'] : 0 // phpcs:ignore WordPress.Security.NonceVerification
+					);
+					?>
+				</span></div>
+			<?php endif; ?>
+
+			<?php if ( 0 === $streets ) : ?>
+				<div class="alert alert-warning d-flex align-items-center p-5 mb-6"><span>No street is ready yet. Type From and To pairs for the streets on the <a class="ms-1" href="<?php echo esc_url( $streets_tab ); ?>">Streets tab</a>, or import them there.</span></div>
+			<?php endif; ?>
+
+			<div class="table-responsive d-none d-md-block">
+				<table class="table table-row-dashed align-middle mb-0">
+					<thead>
+						<tr class="text-gray-600 fw-bolder fs-7">
+							<th>Week</th>
+							<th>Ward</th>
+							<th>Streets asked</th>
+							<th>Test length</th>
+							<th>Status</th>
+							<th>Left out</th>
+						</tr>
+					</thead>
+					<tbody>
+						<?php foreach ( $plan['weeks'] as $week ) :
+							$asked = count( $week['questions'] );
+							$badge = 'filled' === $week['state'] ? array( 'badge-light-success', sprintf( 1 === (int) $week['existing_questions'] ? 'Has %d question, kept' : 'Has %d questions, kept', $week['existing_questions'] ) ) : $badges[ $week['state'] ];
+							$left  = array();
+							if ( $week['flagged'] ) {
+								$left[] = sprintf( '%d need clarification', count( $week['flagged'] ) );
+							}
+							if ( $week['no_answer'] ) {
+								$left[] = sprintf( '%d have no pair yet', count( $week['no_answer'] ) );
+							}
+							?>
+							<tr>
+								<td class="fw-bolder"><?php echo (int) $week['number']; ?></td>
+								<td><?php echo esc_html( $week['ward'] ); ?></td>
+								<td>
+									<?php echo (int) $asked; ?>
+									<?php if ( $asked ) : ?><span class="text-gray-600 fs-7">&middot; <?php echo esc_html( atk_route_course_per_test_text( $asked, $week['tests'] ) ); ?></span><?php endif; ?>
+								</td>
+								<td class="text-gray-700"><?php echo $asked ? esc_html( $week['minutes'] . ' minutes' ) : '&ndash;'; ?></td>
+								<td><span class="badge <?php echo esc_attr( $badge[0] ); ?>"><?php echo esc_html( $badge[1] ); ?></span></td>
+								<td class="text-gray-600 fs-7"><?php echo $left ? esc_html( implode( ', ', $left ) ) : '&ndash;'; ?></td>
+							</tr>
+						<?php endforeach; ?>
+					</tbody>
+				</table>
+			</div>
+
+			<div class="d-md-none" id="atk-route-course-stack">
+				<?php foreach ( $plan['weeks'] as $week ) :
+					$asked = count( $week['questions'] );
+					$badge = 'filled' === $week['state'] ? array( 'badge-light-success', sprintf( 1 === (int) $week['existing_questions'] ? 'Has %d question, kept' : 'Has %d questions, kept', $week['existing_questions'] ) ) : $badges[ $week['state'] ];
+					$left  = array();
+					if ( $week['flagged'] ) {
+						$left[] = sprintf( '%d need clarification', count( $week['flagged'] ) );
+					}
+					if ( $week['no_answer'] ) {
+						$left[] = sprintf( '%d have no pair yet', count( $week['no_answer'] ) );
+					}
+					?>
+					<div class="py-3 border-bottom">
+						<div><span class="fw-bolder me-2"><?php echo (int) $week['number']; ?></span><?php echo esc_html( $week['ward'] ); ?></div>
+						<div class="d-flex flex-wrap align-items-center gap-2 mt-2">
+							<span class="badge <?php echo esc_attr( $badge[0] ); ?>"><?php echo esc_html( $badge[1] ); ?></span>
+							<?php if ( $asked ) : ?><span class="text-gray-600 fs-7"><?php echo (int) $asked; ?> streets &middot; <?php echo esc_html( atk_route_course_per_test_text( $asked, $week['tests'] ) ); ?> &middot; <?php echo esc_html( $week['minutes'] ); ?> min</span><?php endif; ?>
+						</div>
+						<?php if ( $left ) : ?><div class="text-gray-600 fs-7 mt-1">Left out: <?php echo esc_html( implode( ', ', $left ) ); ?></div><?php endif; ?>
+					</div>
+				<?php endforeach; ?>
+			</div>
+
+			<?php if ( $plan['outside'] ) : ?>
+				<p class="text-gray-600 fs-7 mt-4 mb-0"><?php echo esc_html( count( $plan['outside'] ) ); ?> streets are in a ward whose name is not one of the 13 official wards, so they are not used, for example <?php echo esc_html( implode( ', ', array_slice( array_column( $plan['outside'], 'name' ), 0, 3 ) ) ); ?> (<?php echo esc_html( $plan['outside'][0]['ward'] ); ?>). Fix the ward name under Neighbourhoods if they belong in a week.</p>
+			<?php endif; ?>
+			<?php if ( $plan['no_ward'] ) : ?>
+				<p class="text-gray-600 fs-7 mt-3 mb-0"><?php echo esc_html( count( $plan['no_ward'] ) ); ?> streets have no ward and are not used, for example <?php echo esc_html( implode( ', ', array_slice( $plan['no_ward'], 0, 3 ) ) ); ?>.</p>
+			<?php endif; ?>
+
+			<form method="post" action="<?php echo esc_url( admin_url( 'admin-ajax.php' ) ); ?>" class="d-flex flex-wrap align-items-center gap-5 mt-6" id="atk-route-fill-form">
+				<input type="hidden" name="action" value="atk_instructor_fill_route_course" />
+				<?php wp_nonce_field( ATK_INSTRUCTOR_NONCE_ACTION, 'atk_nonce' ); ?>
+				<button type="submit" class="btn btn-primary">Fill weeks 1 to 13</button>
+				<div class="form-check">
+					<input class="form-check-input" type="checkbox" name="replace" value="1" id="atk-route-fill-replace" />
+					<label class="form-check-label" for="atk-route-fill-replace">Also rewrite weeks that already have questions</label>
+				</div>
+			</form>
+		</div>
+	</div>
+	<script>
+		document.getElementById( 'atk-route-fill-form' ).addEventListener( 'submit', function ( e ) {
+			if ( document.getElementById( 'atk-route-fill-replace' ).checked && ! window.confirm( 'This deletes the questions now in those weeks and replaces them. Continue?' ) ) {
+				e.preventDefault();
+			}
+		} );
+	</script>
+	<?php
+}
+
+add_action( 'wp_ajax_atk_instructor_fill_route_course', 'atk_handle_instructor_fill_route_course' );
+function atk_handle_instructor_fill_route_course() {
+	atk_instructor_verify_request();
+	$result = ATK_Street_Store::course_apply( ! empty( $_POST['replace'] ) );
+	atk_instructor_redirect_back( array(
+		'tab' => 'course', 'type' => 'route', 'route_fill' => 1,
+		'fill_created' => $result['weeks_created'], 'fill_filled' => $result['weeks_filled'],
+		'fill_replaced' => $result['weeks_replaced'], 'fill_kept' => $result['weeks_kept'], 'fill_q' => $result['questions'],
+	) );
 }

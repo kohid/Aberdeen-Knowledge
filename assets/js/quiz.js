@@ -98,6 +98,10 @@
 			if ( ! state || ! Array.isArray( state.sessionQuestions ) || ! state.sessionQuestions.length || typeof state.endTime !== "number" ) {
 				return null;
 			}
+			// A saved attempt from before the test changed shape (the Route test used to be multiple choice) cannot be continued.
+			if ( mode === "pair" && ! state.sessionQuestions.every( function ( q ) { return q && Array.isArray( q.pairs ); } ) ) {
+				return null;
+			}
 			return state;
 		} catch ( e ) {
 			return null;
@@ -391,15 +395,34 @@
 	 * user always advances via the Next/Back buttons explicitly.
 	 */
 	function renderTextAnswerInput( previousValue ) {
+		answerAreaEl.innerHTML = roadFieldHtml( "atk-quiz-input", "Type the street name" );
+		initRoadField( "atk-quiz-input", "Type the street name", previousValue, true );
+	}
+
+	/** Markup for one street-name field: a <select> when Select2 is there, otherwise a plain text box. */
+	function roadFieldHtml( id, placeholder ) {
 		var $ = window.jQuery;
 		if ( $ && $.fn && $.fn.select2 ) {
-			answerAreaEl.innerHTML = '<select class="form-select form-select-lg" id="atk-quiz-input"></select>';
-			var $input = $( "#atk-quiz-input" );
+			return '<select class="form-select form-select-lg" id="' + id + '"></select>';
+		}
+		return '<input type="text" class="form-control form-control-lg" id="' + id + '" autocomplete="off" placeholder="' + placeholder + '&hellip;" />';
+	}
+
+	/**
+	 * Turns the field made by roadFieldHtml() into a Select2 offering the real street names,
+	 * and puts a previous answer back (a question revisited with Back). $focusPlain focuses
+	 * the plain fallback box when there is nothing to put back.
+	 */
+	function initRoadField( id, placeholder, previousValue, focusPlain ) {
+		var $ = window.jQuery;
+		var input = document.getElementById( id );
+		if ( $ && $.fn && $.fn.select2 && input && input.tagName === "SELECT" ) {
+			var $input = $( input );
 			var roadNames = ATK_QUIZ.roadNames || [];
 			$input.select2( {
 				tags: true,
 				width: "100%",
-				placeholder: "Type the street name…",
+				placeholder: placeholder + "…",
 				data: roadNames.map( function ( name ) { return { id: name, text: name }; } )
 			} );
 			if ( previousValue && roadNames.indexOf( previousValue ) === -1 ) {
@@ -412,14 +435,28 @@
 			$input.val( previousValue || null ).trigger( "change" );
 			return;
 		}
-
-		answerAreaEl.innerHTML = '<input type="text" class="form-control form-control-lg" id="atk-quiz-input" autocomplete="off" placeholder="Type the street name&hellip;" />';
-		var input = document.getElementById( "atk-quiz-input" );
+		if ( ! input ) {
+			return;
+		}
 		if ( previousValue ) {
 			input.value = previousValue;
-		} else {
+		} else if ( focusPlain ) {
 			input.focus();
 		}
+	}
+
+	/**
+	 * Route test answer: where the street runs From and To, two street-name fields.
+	 * $previous is the { from, to } of a question revisited with Back.
+	 */
+	function renderPairInputs( previous ) {
+		previous = previous || {};
+		answerAreaEl.innerHTML = '<div class="row g-5">' +
+			'<div class="col-md-6"><label class="form-label fw-bold" for="atk-quiz-from">From</label>' + roadFieldHtml( "atk-quiz-from", "Type the street" ) + "</div>" +
+			'<div class="col-md-6"><label class="form-label fw-bold" for="atk-quiz-to">To</label>' + roadFieldHtml( "atk-quiz-to", "Type the street" ) + "</div>" +
+			"</div>";
+		initRoadField( "atk-quiz-from", "Type the street", previous.from, true );
+		initRoadField( "atk-quiz-to", "Type the street", previous.to, false );
 	}
 
 	function renderQuestion() {
@@ -444,6 +481,8 @@
 
 		if ( mode === "text" ) {
 			renderTextAnswerInput( previous ? previous.rawGiven : "" );
+		} else if ( mode === "pair" ) {
+			renderPairInputs( previous ? previous.rawGiven : null );
 		} else {
 			var html = "";
 			q.options.forEach( function ( option, i ) {
@@ -479,6 +518,27 @@
 				correctText: q.accepted.join( " / " ),
 				correct: correct,
 				rawGiven: given
+			};
+		}
+
+		if ( mode === "pair" ) {
+			var fromEl = document.getElementById( "atk-quiz-from" );
+			var toEl   = document.getElementById( "atk-quiz-to" );
+			var from   = fromEl ? fromEl.value : "";
+			var to     = toEl ? toEl.value : "";
+			var shown  = "(no answer)";
+			if ( from && to ) {
+				shown = escapeHtml( from ) + " to " + escapeHtml( to );
+			} else if ( from || to ) {
+				shown = "(only one box filled) " + escapeHtml( from || to );
+			}
+
+			return {
+				prompt: q.prompt,
+				given: shown,
+				correctText: escapeHtml( window.ATK_ROUTE_PAIRS.label( q.pairs ) ),
+				correct: window.ATK_ROUTE_PAIRS.matches( from, to, q.pairs ),
+				rawGiven: { from: from, to: to }
 			};
 		}
 

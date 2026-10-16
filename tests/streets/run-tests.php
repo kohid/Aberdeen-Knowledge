@@ -60,6 +60,8 @@ check( 'Ave and Drive fold too', ATK_Route_Pairs::matches( 'Forest Av', 'Dee Dr'
 check( 'Avenue folds to Ave', ATK_Route_Pairs::matches( 'Forest Ave', 'Dee Dr', array( array( 'Forest Avenue', 'Dee Drive' ) ) ), true );
 
 check( 'pairs read as text', ATK_Route_Pairs::label( array( 'Dyce', 'Torry' ) ), 'Dyce to Torry' );
+check( 'every pair reads as text', ATK_Route_Pairs::label_all( array( array( 'A Rd', 'B St' ), array( 'C', 'D' ) ) ), 'A Rd to B St / C to D' );
+check( 'no pairs read as nothing', ATK_Route_Pairs::label_all( array() ), '' );
 
 /* ---- Sheet reader ------------------------------------------------------ */
 
@@ -137,8 +139,10 @@ check( 'questions carry the accepted pairs', $plan['weeks'][0]['questions'][0]['
 check( 'flagged street is listed, not asked', $plan['weeks'][1]['flagged'], array( 'Red Road' ) );
 check( 'street without a pair is listed, not asked', $plan['weeks'][0]['no_answer'], array( 'Blank Road' ) );
 check( 'street with no ward is reported', $plan['no_ward'], array( 'Lost Road' ) );
-check( 'streets in a ward that is not an official one are reported with that ward', $plan['outside'], array( array( 'name' => 'Odd Road', 'ward' => 'Somewhere Else' ), array( 'name' => 'Harbour Road', 'ward' => 'George St/Harbour' ) ) );
-check( 'ward name spelling George St is not guessed', count( $plan['weeks'][2]['questions'] ), 0 );
+check( 'streets in a ward that is not an official one are reported with that ward', $plan['outside'], array( array( 'name' => 'Odd Road', 'ward' => 'Somewhere Else' ) ) );
+check( 'St and Street are the same word in a ward name', array_column( $plan['weeks'][2]['questions'], 'street' ), array( 'Harbour Road' ) );
+check( 'but a different word is never matched', ATK_Route_Planner::ward_match_key( 'George Place/Harbour' ) === ATK_Route_Planner::ward_match_key( 'George Street/Harbour' ), false );
+check( 'spaces and case in a ward name do not matter', ATK_Route_Planner::ward_match_key( 'george st / HARBOUR' ), ATK_Route_Planner::ward_match_key( 'George Street/Harbour' ) );
 check( 'week 2 splits its 3 streets over the 5 tests', array_map( 'count', $plan['weeks'][1]['tests'] ), array( 1, 1, 1, 0, 0 ) );
 check( 'week 2 test 1 starts with the first street A to Z', $plan['weeks'][1]['tests'][0][0]['street'], 'alpha Road' );
 check( 'week minutes', $plan['weeks'][1]['minutes'], 20 );

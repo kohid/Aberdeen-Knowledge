@@ -101,6 +101,11 @@ class ATK_Route_Pairs {
 		return false;
 	}
 
+	/** Every pair, for the Course Builder and the review: "A to B / C to D". */
+	public static function label_all( array $pairs ) {
+		return implode( ' / ', array_map( array( __CLASS__, 'label' ), array_values( array_filter( $pairs, 'is_array' ) ) ) );
+	}
+
 	public static function label( array $pair ) {
 		$pair = array_values( $pair );
 		return ( isset( $pair[0] ) ? $pair[0] : '' ) . ' to ' . ( isset( $pair[1] ) ? $pair[1] : '' );
@@ -293,6 +298,15 @@ class ATK_Route_Planner {
 		return 'ready';
 	}
 
+	/**
+	 * How a ward name is compared with the official list: case, spaces around slashes and
+	 * St = Street are ignored ("George St/Harbour" is the official "George Street/Harbour").
+	 * Only for matching; the name that is stored and shown is never changed.
+	 */
+	public static function ward_match_key( $ward ) {
+		return preg_replace( '/\bstreet\b/u', 'st', ATK_Poi_Parser::ward_key( $ward ) );
+	}
+
 	/** A test lasts 20 minutes, or one minute a question when it is longer than that. */
 	public static function minutes( $count ) {
 		return max( self::MIN_MINUTES, (int) $count );
@@ -331,7 +345,7 @@ class ATK_Route_Planner {
 		$index = array();
 		$weeks = array();
 		foreach ( array_values( $official ) as $i => $ward ) {
-			$index[ ATK_Poi_Parser::ward_key( $ward ) ] = $i;
+			$index[ self::ward_match_key( $ward ) ] = $i;
 			$weeks[ $i ] = array( 'number' => $i + 1, 'ward' => $ward, 'questions' => array(), 'flagged' => array(), 'no_answer' => array(), 'tests' => array(), 'minutes' => self::MIN_MINUTES );
 		}
 		$no_ward = array();
@@ -345,7 +359,7 @@ class ATK_Route_Planner {
 			$hit = array();
 			$odd = array();
 			foreach ( $wards as $ward ) {
-				$key = ATK_Poi_Parser::ward_key( $ward );
+				$key = self::ward_match_key( $ward );
 				if ( isset( $index[ $key ] ) ) {
 					$hit[ $index[ $key ] ] = true;
 				} else {

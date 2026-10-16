@@ -8,7 +8,7 @@ for file in tests/neighbourhoods/run-tests.php tests/neighbourhoods/planner-test
 	php "$file" | tail -1 || status=1
 	[ "${PIPESTATUS[0]}" -eq 0 ] || status=1
 done
-for file in tests/places/geo-tests.mjs; do
+for file in tests/places/geo-tests.mjs tests/streets/pair-tests.mjs; do
 	[ -f "$file" ] || continue
 	echo "== node $file"
 	node "$file" | tail -1 || status=1

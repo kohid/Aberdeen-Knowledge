@@ -73,11 +73,13 @@ There is no build step or package manager in this repository. Verify changes wit
 - JS: `node --check path/to/file.js`
 - Plain-PHP tests (no WordPress needed): `php tests/neighbourhoods/run-tests.php`,
   `php tests/neighbourhoods/planner-tests.php`, `php tests/brand/run-tests.php`,
-  `php tests/places/run-tests.php`, `php tests/places/planner-tests.php`, `node tests/places/geo-tests.mjs`;
-  `bash tests/run-all.sh` runs all of them
+  `php tests/places/run-tests.php`, `php tests/places/planner-tests.php`, `php tests/streets/run-tests.php`,
+  `node tests/places/geo-tests.mjs`, `node tests/streets/pair-tests.mjs` (needs `php`; checks the browser's From/To marking
+  agrees with `ATK_Route_Pairs`); `bash tests/run-all.sh` runs all of them
 - Updater check (`Check for updates` link on the Plugins row, GitHub stubbed): `ATK_WP_LOAD=/path/to/wp-load.php php tests/updater/integration.php`
 - Places of Interest checks that need WordPress: `ATK_WP_LOAD=/path/to/wp-load.php php tests/places/integration.php`
   against a throwaway site with the plugin active. It creates its own rows (all named `ZZ-IT ...`) and removes them.
+  The same goes for `tests/streets/integration.php` (Streets tab store, REST, import, Route course fill, course reads and limits).
 - UI changes: take a real screenshot (headless Chromium against a throwaway or the live site) instead of assuming
   a CSS or layout fix worked.
 
@@ -113,6 +115,7 @@ New code added in the plugin era uses the `akn_` / `AKN_` prefix (brand, assets,
 - `instructor.php`, `instructor-roads.php`: the front-end Instructor Dashboard
 - `neighbourhoods.php`, `neighbourhoods-engine.php`: the dashboard's Neighbourhoods tab (see below)
 - `poi-places.php`, `poi-places-engine.php`: Study Tools > Places of Interest (see below)
+- `streets.php`, `streets-engine.php`: the dashboard's Streets tab and the Official Route test's questions (see below)
 - `settings.php`: payment gateway config and the shortcode reference list, instructor-only
 - `theme-mode.php`, `icons.php`: dark/light mode and icon rendering
 - `demo.php`: generates and clears sample driver accounts for the dashboard's Demo tab
@@ -222,6 +225,44 @@ empty and the instructor imports the official sheet.
 - **Public**: `GET atk/v1/poi-venues` (cached one minute, `Cache-Control: public, max-age=60`) returns the pinned places; the map
   page reads only that route. The POI test and the Course Builder POI picker read the saved places that are current and have
   a street answer.
+
+## Streets and the Official Route test
+
+The dashboard's **Streets** tab (`?tab=streets`) is the list of streets behind the Official Route test. Each street is one question:
+the student types where it runs **From** and **To**. Two views: **Alphabetical** (editable: add, edit, remove, import, A to Z jump,
+search and status filters) and **By ward** (read only, built from the same data, so a change in Alphabetical shows there at once;
+a street in two wards appears under both).
+
+- **Storage**: no new table for the list. `atk_nb_streets` (the Neighbourhoods registry, which also holds the OpenStreetMap master
+  list) gained `listed`, `flagged` and `routes` (JSON pairs); `course_route_questions` gained `street` and `pairs`
+  (`ATK_DB_VERSION` 7). A street is on the Streets list when `listed = 1` or it has a ward link. Wards are edited through
+  `atk_nb_links`, so the Neighbourhoods tab and the Streets tab always agree. "Remove" unlinks the wards and clears the flag, pairs
+  and `listed`; the registry row stays (it may be a real OpenStreetMap street).
+- **Status** of a street: `clarify` (flagged, the red rows of Jay's sheet) comes first, then `needs_answer` (no pair), then `ready`.
+  Only `ready` streets become questions.
+- **Pairs** (`ATK_Route_Pairs`, `inc/streets-engine.php`): up to 20 per street, each From/To up to 120 characters. A reply is right
+  when it is any listed pair, **in either order**; both boxes are required and the same place twice is wrong. Case, apostrophes and
+  punctuation are ignored and Street/Road/Avenue/Drive/Boulevard fold to St/Rd/Ave/Dr/Blvd. `assets/js/route-pairs.js` repeats
+  this for the quiz page, and `tests/streets/pair-tests.mjs` checks both sides agree on the same inputs. Change one, change both.
+- **Import** (`ATK_Street_Parser`, `ATK_Street_Store::import_*`): columns Road, Ward, Post Code, Address, Note, Clarify, From, To
+  (`.xlsx`/`.csv` read in the browser with the bundled SheetJS, or pasted). A repeated street merges its pairs. Clarify blank leaves
+  the flag alone; no/n/0/false/clear/cleared/ok/done/resolved clears it; anything else sets it. A ward not on the site is skipped
+  with an issue (create it on the Neighbourhoods tab). A street not on the site is added only when "add new streets" is ticked.
+  Blank cells never erase saved data. The review is limited to 400 rows and the server rebuilds the plan at save time.
+- **Official Route test** (`ATK_Route_Planner::course_plan`): the Course Builder's Route Test track has a card, "Fill the Official
+  Route test from your streets": 13 weeks, one per official ward in official order (`ATK_Poi_Planner::OFFICIAL_WARDS`). A ward's
+  ready streets are divided **evenly and in order** over its five tests (the first `n mod 5` tests get one extra) so every ready
+  street is asked once and nothing is cut to 20; a street in two wards is asked in both weeks. A test lasts `max(20, number of
+  questions)` minutes (`atk_course_test_minutes()`), the pass mark stays 75 percent, and the course, the attempt review and the
+  catalog count the real number of questions (`atk_course_test_max_questions()`, `atk_attempt_limits()`,
+  `atk_course_total_questions()`). Ward names are matched ignoring case, spaces around slashes and St = Street
+  (`ATK_Route_Planner::ward_match_key`), so the sheet's "George St/Harbour" is the official "George Street/Harbour"; streets in any
+  other unknown ward, or with no ward, are listed as left out and never guessed. Existing weeks are untouched unless "rewrite" is
+  ticked, and a rewrite deletes only rows with a `street` (older multiple-choice rows stay in the table but are no longer read).
+  Weeks already made keep their copy of the pairs, so after editing pairs run the card again with "rewrite" ticked.
+- **Quiz**: the Route course test uses quiz mode `pair` (two Select2 street fields, From and To; no map). The mockup Route Test
+  is unchanged (multiple choice). The review lists every accepted pair.
+- **Tests**: pure rules in `tests/streets/run-tests.php`, WordPress checks in `tests/streets/integration.php`.
 
 ## Releases
 

@@ -34,6 +34,23 @@ function atk_is_valid_attempt_key( $test_key ) {
 	return $is_course_key || atk_quiz_config( $test_key ) || in_array( $test_key, $other_valid_keys, true );
 }
 
+/**
+ * The most questions and minutes a recorded attempt of this test can honestly have. Every
+ * test is 30 questions at most and ATK_QUIZ_MINUTES long, except the Official Route test,
+ * whose tests are as long as the streets saved in them (see atk_course_test_max_questions()).
+ *
+ * @return array{questions:int,minutes:int}
+ */
+function atk_attempt_limits( $test_key ) {
+	$limits = array( 'questions' => 30, 'minutes' => ATK_QUIZ_MINUTES );
+	if ( preg_match( '/^course-route-w(\d+)-t(\d+)$/', (string) $test_key, $m ) && function_exists( 'atk_course_test_max_questions' ) ) {
+		$count = atk_course_test_max_questions( 'route', (int) $m[1], (int) $m[2] );
+		$limits['questions'] = max( 30, $count );
+		$limits['minutes']   = atk_course_test_minutes( 'route', (int) $m[1], (int) $m[2] );
+	}
+	return $limits;
+}
+
 add_action( 'wp_ajax_atk_track_attempt', 'atk_handle_track_attempt' );
 add_action( 'wp_ajax_nopriv_atk_track_attempt', 'atk_handle_track_attempt' );
 function atk_handle_track_attempt() {
@@ -106,12 +123,13 @@ function atk_handle_record_review() {
 
 	$total    = isset( $_POST['total'] ) ? (int) $_POST['total'] : 0;
 	$score    = isset( $_POST['score'] ) ? (int) $_POST['score'] : 0;
-	$total    = max( 0, min( 30, $total ) );
+	$limits   = atk_attempt_limits( $test_key );
+	$total    = max( 0, min( $limits['questions'], $total ) );
 	$score    = max( 0, min( $total, $score ) );
-	// Clamped to double the test's real allowance (ATK_QUIZ_MINUTES) as a
-	// sanity ceiling — a client-reported value, never trusted outright.
+	// Clamped to double the test's real allowance as a sanity ceiling — a
+	// client-reported value, never trusted outright.
 	$duration = isset( $_POST['duration'] ) ? (int) $_POST['duration'] : 0;
-	$duration = max( 0, min( ATK_QUIZ_MINUTES * 60 * 2, $duration ) );
+	$duration = max( 0, min( $limits['minutes'] * 60 * 2, $duration ) );
 
 	$raw_answers = array();
 	if ( isset( $_POST['answers'] ) ) {
@@ -122,7 +140,7 @@ function atk_handle_record_review() {
 	}
 
 	$answers = array();
-	foreach ( array_slice( $raw_answers, 0, 30 ) as $raw ) {
+	foreach ( array_slice( $raw_answers, 0, $limits['questions'] ) as $raw ) {
 		if ( ! is_array( $raw ) ) {
 			continue;
 		}
