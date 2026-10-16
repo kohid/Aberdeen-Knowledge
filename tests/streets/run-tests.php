@@ -52,6 +52,13 @@ check( 'both empty is wrong even with no pairs', ATK_Route_Pairs::matches( '', '
 check( 'no pairs means nothing is right', ATK_Route_Pairs::matches( 'Dyce', 'Torry', array() ), false );
 check( 'same place twice is not a pair of different places', ATK_Route_Pairs::matches( 'Dyce', 'Dyce', $pairs ), false );
 
+$streets_pairs = array( array( 'Union Street', 'Skene Road' ) );
+check( 'St is the same as Street', ATK_Route_Pairs::matches( 'union st', 'SKENE ROAD', $streets_pairs ), true );
+check( 'Rd is the same as Road', ATK_Route_Pairs::matches( 'Union Street', 'Skene Rd.', $streets_pairs ), true );
+check( 'St and Street count as one pair when cleaning', ATK_Route_Pairs::clean( array( array( 'Union Street', 'Skene Road' ), array( 'Union St', 'Skene Rd' ) ) ), array( array( 'Union Street', 'Skene Road' ) ) );
+check( 'Ave and Drive fold too', ATK_Route_Pairs::matches( 'Forest Av', 'Dee Dr', array( array( 'Forest Avenue', 'Dee Drive' ) ) ), false );
+check( 'Avenue folds to Ave', ATK_Route_Pairs::matches( 'Forest Ave', 'Dee Dr', array( array( 'Forest Avenue', 'Dee Drive' ) ) ), true );
+
 check( 'pairs read as text', ATK_Route_Pairs::label( array( 'Dyce', 'Torry' ) ), 'Dyce to Torry' );
 
 /* ---- Sheet reader ------------------------------------------------------ */
@@ -76,6 +83,17 @@ check( 'note is read', $parsed[1]['note'], 'Which end?' );
 check( 'a sheet without the new columns still reads', ATK_Street_Parser::parse_rows( array( array( 'Road', 'Ward' ), array( 'ALPHA ROAD', 'Bridge of Don' ) ) )[0]['pairs'], array() );
 check( 'a header-less table is not a sheet', ATK_Street_Parser::parse_rows( array( array( 'ALPHA ROAD', 'x' ) ) ), array() );
 check( 'a half-filled pair is reported', ATK_Street_Parser::parse_rows( array( array( 'Road', 'From', 'To' ), array( 'ALPHA ROAD', 'Dyce', '' ) ) )[0]['issues'], array( 'Only one of From and To is filled in, so that pair was ignored.' ) );
+
+/* ---- Pasted text ------------------------------------------------------- */
+
+$paste = ATK_Street_Parser::parse_paste( "Road\tWard\tClarify\tFrom\tTo\nALPHA ROAD\tBridge of Don\t\tUnion Street\tSkene Road\nBETA LANE\t\tx\t\t\n" );
+check( 'tab-separated paste with a header', array_column( $paste, 'road' ), array( 'ALPHA ROAD', 'BETA LANE' ) );
+check( 'paste pairs and flags', array( $paste[0]['pairs'], $paste[1]['clarify'] ), array( array( array( 'Union Street', 'Skene Road' ) ), true ) );
+$csv = ATK_Street_Parser::parse_paste( "Road, Ward, From, To\n\"ALPHA ROAD\", Bridge of Don, \"Union Street\", \"Skene Road\"\n" );
+check( 'csv paste with quotes', array( $csv[0]['road'], $csv[0]['pairs'] ), array( 'ALPHA ROAD', array( array( 'Union Street', 'Skene Road' ) ) ) );
+$names = ATK_Street_Parser::parse_paste( "Alpha Road\nBeta Lane\n\nGamma Street\n" );
+check( 'a plain list of names has no header and no answers', array( array_column( $names, 'road' ), $names[0]['pairs'] ), array( array( 'Alpha Road', 'Beta Lane', 'Gamma Street' ), array() ) );
+check( 'empty paste', ATK_Street_Parser::parse_paste( "  \n" ), array() );
 
 /* ---- Status ------------------------------------------------------------ */
 

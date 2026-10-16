@@ -14,7 +14,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-const ATK_DB_VERSION = 6;
+const ATK_DB_VERSION = 7;
 
 function atk_table( $name ) {
 	global $wpdb;
@@ -74,6 +74,8 @@ function atk_maybe_install_db() {
 		to_place VARCHAR(255) NOT NULL,
 		options TEXT NOT NULL,
 		correct_index TINYINT UNSIGNED NOT NULL DEFAULT 0,
+		street VARCHAR(191) NOT NULL DEFAULT '',
+		pairs TEXT NULL,
 		sort_order INT UNSIGNED NOT NULL DEFAULT 0,
 		PRIMARY KEY  (id),
 		KEY week_test (week_id, test_number)
@@ -140,6 +142,9 @@ function atk_maybe_install_db() {
 		outcode VARCHAR(16) NOT NULL DEFAULT '',
 		postcodes TEXT NULL,
 		note TEXT NULL,
+		listed TINYINT(1) NOT NULL DEFAULT 0,
+		flagged TINYINT(1) NOT NULL DEFAULT 0,
+		routes TEXT NULL,
 		PRIMARY KEY  (id),
 		UNIQUE KEY name (name)
 	) $charset_collate;";

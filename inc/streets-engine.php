@@ -24,8 +24,20 @@ class ATK_Route_Pairs {
 
 	const MAX_LENGTH = 120;
 
-	private static function key( $text ) {
-		return ATK_Nb_Parser::normalise_name( $text );
+	/**
+	 * Case, apostrophes and punctuation are ignored, and the common road words are
+	 * folded the same way the quiz page does (Street = St, Road = Rd, Avenue = Ave,
+	 * Drive = Dr, Boulevard = Blvd). assets/js/quiz.js repeats this for the pair mode.
+	 */
+	public static function key( $text ) {
+		$words = explode( ' ', ATK_Nb_Parser::normalise_name( $text ) );
+		$fold  = array( 'STREET' => 'ST', 'ROAD' => 'RD', 'AVENUE' => 'AVE', 'DRIVE' => 'DR', 'BOULEVARD' => 'BLVD' );
+		foreach ( $words as $i => $word ) {
+			if ( isset( $fold[ $word ] ) ) {
+				$words[ $i ] = $fold[ $word ];
+			}
+		}
+		return implode( ' ', $words );
 	}
 
 	/**
@@ -232,6 +244,36 @@ class ATK_Street_Parser {
 			unset( $first );
 		}
 		return $out;
+	}
+
+	/**
+	 * Reads pasted text: tab-separated (copied from a spreadsheet), comma-separated
+	 * with a header, or a plain list of street names, one per line.
+	 */
+	public static function parse_paste( $text ) {
+		$text  = str_replace( array( "\r\n", "\r" ), "\n", (string) $text );
+		$text  = preg_replace( '/^\xEF\xBB\xBF/', '', $text );
+		$lines = array_values( array_filter( explode( "\n", $text ), function ( $line ) {
+			return '' !== trim( $line );
+		} ) );
+		if ( ! $lines ) {
+			return array();
+		}
+		$tabbed = false !== strpos( $text, "\t" );
+		$table  = array();
+		foreach ( $lines as $line ) {
+			$table[] = $tabbed ? explode( "\t", $line ) : str_getcsv( $line, ',', '"', '' );
+		}
+		$rows = self::parse_rows( $table );
+		if ( $rows ) {
+			return $rows;
+		}
+		// No header row: a list of names, one per line.
+		$names = array( array( 'Road' ) );
+		foreach ( $lines as $line ) {
+			$names[] = array( trim( $line, " \t,;-*\xE2\x80\xA2" ) );
+		}
+		return self::parse_rows( $names );
 	}
 }
 

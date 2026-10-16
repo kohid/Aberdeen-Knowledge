@@ -32,7 +32,7 @@ Status of a street: **Needs clarification** (flag set), else **Needs answer** (n
 
 ## Matching
 
-`ATK_Route_Pairs` (pure PHP, `inc/streets-engine.php`): text is compared after the same normalising the street registry uses (case, apostrophes, punctuation and hyphens). A reply of `(from, to)` is correct when it equals some listed pair as `(from, to)` or `(to, from)`. Both boxes must be filled. No guessing of abbreviations.
+`ATK_Route_Pairs` (pure PHP, `inc/streets-engine.php`): text is compared after the same normalising the street registry uses (case, apostrophes, punctuation and hyphens). A reply of `(from, to)` is correct when it equals some listed pair as `(from, to)` or `(to, from)`. Both boxes must be filled. Street, Road, Avenue, Drive and Boulevard match St, Rd, Ave, Dr and Blvd (as in the Street test); nothing else is guessed.
 
 ## Official Route test
 
