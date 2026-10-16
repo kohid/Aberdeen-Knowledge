@@ -161,15 +161,15 @@
 						"<li class=\"nav-item\" role=\"presentation\"><button type=\"button\" class=\"nav-link\" role=\"tab\" data-act=\"view\" data-view=\"ward\" id=\"atk-streets-tab-w\">By ward</button></li>" +
 					"</ul>" +
 					"<div class=\"d-flex flex-wrap align-items-center gap-4 mb-5\">" +
-						"<input id=\"atk-streets-search\" class=\"form-control form-control-solid w-100 mw-350px\" type=\"search\" placeholder=\"Search streets, postcodes or answers\" aria-label=\"Search streets\">" +
-						"<select id=\"atk-streets-status-filter\" class=\"form-select form-select-solid w-100 mw-350px\" aria-label=\"Show streets by status\">" +
+						"<input id=\"atk-streets-search\" class=\"form-control form-control-solid akn-streets-filter\" type=\"search\" placeholder=\"Search streets, postcodes or answers\" aria-label=\"Search streets\">" +
+						"<select id=\"atk-streets-status-filter\" class=\"form-select form-select-solid akn-streets-filter\" aria-label=\"Show streets by status\">" +
 							"<option value=\"\">All streets</option>" +
 							"<option value=\"ready\">Ready</option>" +
 							"<option value=\"needs_answer\">Needs an answer</option>" +
 							"<option value=\"clarify\">Needs clarification</option>" +
 							"<option value=\"no_ward\">No ward</option>" +
 						"</select>" +
-						"<select id=\"atk-streets-ward-filter\" class=\"form-select form-select-solid w-100 mw-350px\" aria-label=\"Show one ward\"></select>" +
+						"<select id=\"atk-streets-ward-filter\" class=\"form-select form-select-solid akn-streets-filter\" aria-label=\"Show one ward\"></select>" +
 					"</div>" +
 					"<div id=\"atk-streets-list\"></div>" +
 				"</div>" +
@@ -294,7 +294,7 @@
 		return "<tr>" +
 			"<td class=\"akn-streets-name\"><div class=\"fw-bold text-gray-900\">" + esc( street.name ) + "</div>" +
 				( also.length ? "<div class=\"text-gray-600 fs-7\">Also in " + esc( also.join( " and " ) ) + "</div>" : "" ) + "</td>" +
-			"<td class=\"text-nowrap text-gray-700\">" + esc( street.postcodes.join( ", " ) ) + "</td>" +
+			"<td class=\"text-gray-700\">" + esc( street.postcodes.join( ", " ) ) + "</td>" +
 			"<td>" + answersCell( street ) + "</td>" +
 			"<td>" + statusBadge( street ) + "</td>" +
 		"</tr>";
@@ -309,7 +309,7 @@
 		var letters = {};
 		items.forEach( function ( s ) { letters[ azLetter( s.name ) ] = true; } );
 		var jump = "<nav class=\"akn-streets-jump d-flex flex-wrap gap-1 mb-5\" aria-label=\"Jump to a letter\">" +
-			"ABCDEFGHIJKLMNOPQRSTUVWXYZ".split( "" ).concat( [ "#" ] ).map( function ( l ) {
+			"ABCDEFGHIJKLMNOPQRSTUVWXYZ".split( "" ).concat( letters[ "#" ] ? [ "#" ] : [] ).map( function ( l ) {
 				return letters[ l ] ?
 					"<a class=\"btn btn-sm btn-icon btn-light-primary\" href=\"#atk-az-" + ( l === "#" ? "other" : l ) + "\" data-act=\"jump\" data-letter=\"" + l + "\">" + l + "</a>" :
 					"<span class=\"btn btn-sm btn-icon btn-light disabled\" aria-hidden=\"true\">" + l + "</span>";
@@ -757,7 +757,7 @@
 			event.preventDefault();
 			var anchor = document.getElementById( "atk-az-" + ( target.getAttribute( "data-letter" ) === "#" ? "other" : target.getAttribute( "data-letter" ) ) );
 			if ( anchor ) {
-				anchor.scrollIntoView( { behavior: "auto", block: "start" } );
+				anchor.scrollIntoView( { behavior: "instant", block: "start" } );
 			}
 		}
 	}
