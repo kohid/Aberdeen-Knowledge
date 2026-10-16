@@ -540,7 +540,7 @@ function atk_render_instructor_dashboard() {
 		// Major Streets moved inside Study Tools; old bookmarks still land there.
 		$tab = 'study-tools';
 	}
-	if ( ! in_array( $tab, array( 'results', 'course', 'questions', 'study-tools', 'neighbourhoods', 'demo' ), true ) ) {
+	if ( ! in_array( $tab, array( 'results', 'course', 'questions', 'study-tools', 'neighbourhoods', 'streets', 'demo' ), true ) ) {
 		$tab = 'results';
 	}
 	?>
@@ -566,6 +566,9 @@ function atk_render_instructor_dashboard() {
 				<a class="nav-link<?php echo 'neighbourhoods' === $tab ? ' active' : ''; ?>" href="<?php echo esc_url( add_query_arg( 'tab', 'neighbourhoods', atk_get_page_url( 'instructor-dashboard' ) ) ); ?>">Neighbourhoods</a>
 			</li>
 			<li class="nav-item">
+				<a class="nav-link<?php echo 'streets' === $tab ? ' active' : ''; ?>" href="<?php echo esc_url( add_query_arg( 'tab', 'streets', atk_get_page_url( 'instructor-dashboard' ) ) ); ?>">Streets</a>
+			</li>
+			<li class="nav-item">
 				<a class="nav-link<?php echo 'demo' === $tab ? ' active' : ''; ?>" href="<?php echo esc_url( add_query_arg( 'tab', 'demo', atk_get_page_url( 'instructor-dashboard' ) ) ); ?>">Demo</a>
 			</li>
 		</ul>
@@ -579,6 +582,8 @@ function atk_render_instructor_dashboard() {
 			atk_render_instructor_study_tools_tab();
 		} elseif ( 'neighbourhoods' === $tab ) {
 			atk_render_instructor_neighbourhoods_tab();
+		} elseif ( 'streets' === $tab ) {
+			atk_render_instructor_streets_tab();
 		} elseif ( 'demo' === $tab ) {
 			atk_render_instructor_demo_tab();
 		} else {

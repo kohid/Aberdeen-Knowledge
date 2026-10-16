@@ -76,8 +76,8 @@ class ATK_Street_Store {
 		if ( ! $row ) {
 			return null;
 		}
-		$links = ATK_Nb_Store::street_link_map();
-		return self::entry( $row, isset( $links[ (int) $id ] ) ? $links[ (int) $id ] : array() );
+		$ward_ids = array_map( 'intval', (array) $wpdb->get_col( $wpdb->prepare( 'SELECT neighbourhood_id FROM ' . atk_table( 'nb_links' ) . ' WHERE street_id = %d', (int) $id ) ) );
+		return self::entry( $row, $ward_ids );
 	}
 
 	/** Wards in the official order first, then any others A to Z. */
@@ -229,8 +229,8 @@ class ATK_Street_Store {
 		global $wpdb;
 		ATK_Nb_Store::sync_streets();
 		$by_key = array();
-		foreach ( (array) $wpdb->get_results( 'SELECT id, name FROM ' . self::table() ) as $row ) {
-			$by_key[ ATK_Nb_Parser::normalise_name( $row->name ) ] = (int) $row->id;
+		foreach ( (array) $wpdb->get_results( 'SELECT id, name FROM ' . self::table() . ' ORDER BY id ASC' ) as $row ) {
+			$by_key[ ATK_Nb_Parser::normalise_name( $row->name ) ][] = array( (int) $row->id, (string) $row->name );
 		}
 		$current = array();
 		foreach ( self::all() as $street ) {
@@ -245,9 +245,31 @@ class ATK_Street_Store {
 		$rows    = array();
 		$names   = array();
 		foreach ( $parsed as $item ) {
-			$key = ATK_Nb_Parser::normalise_name( $item['road'] );
-			$id  = isset( $by_key[ $key ] ) ? $by_key[ $key ] : 0;
+			// The street already on the site: the one spelled the same, else one already on the list, else the first.
+			$id    = 0;
+			$name  = ATK_Nb_Store::new_street_name( $item['road'] );
+			$found = $by_key[ ATK_Nb_Parser::normalise_name( $item['road'] ) ] ?? array();
+			foreach ( $found as $candidate ) {
+				if ( $candidate[1] === $name ) {
+					$id = $candidate[0];
+					break;
+				}
+			}
+			if ( ! $id ) {
+				foreach ( $found as $candidate ) {
+					if ( isset( $current[ $candidate[0] ] ) ) {
+						$id = $candidate[0];
+						break;
+					}
+				}
+			}
+			if ( ! $id && $found ) {
+				$id = $found[0][0];
+			}
 			$old = isset( $current[ $id ] ) ? $current[ $id ] : null;
+			if ( $id && ! $old ) {
+				$old = self::get( $id ); // On the site's street list, not on this list yet.
+			}
 
 			$wards   = array();
 			$issues  = $item['issues'];
@@ -276,6 +298,7 @@ class ATK_Street_Store {
 			} elseif ( ! $old['listed'] && ! $old['wards'] ) {
 				$changes[] = 'added to the list';
 			}
+			$existing_name = $old ? $old['name'] : '';
 			if ( count( $new_wards ) > count( $old_wards ) ) {
 				$changes[] = ( count( $new_wards ) - count( $old_wards ) ) . ' ward' . ( 1 === count( $new_wards ) - count( $old_wards ) ? '' : 's' );
 				$summary['wards_added'] += count( $new_wards ) - count( $old_wards );
@@ -304,6 +327,7 @@ class ATK_Street_Store {
 			$rows[] = array(
 				'line'      => $item['line'],
 				'road'      => $item['road'],
+				'name'      => $existing_name ? $existing_name : $name,
 				'street_id' => $id,
 				'changes'   => $changes,
 				'issues'    => $issues,
@@ -351,7 +375,7 @@ class ATK_Street_Store {
 				continue;
 			}
 			$result = self::save(
-				array_merge( array( 'name' => $row['road'] ), $row['apply'] ),
+				array_merge( array( 'name' => $row['name'] ), $row['apply'] ),
 				$row['street_id']
 			);
 			if ( is_wp_error( $result ) ) {
@@ -569,4 +593,22 @@ function atk_streets_rest_import_preview( WP_REST_Request $request ) {
 
 function atk_streets_rest_import_commit( WP_REST_Request $request ) {
 	return rest_ensure_response( ATK_Street_Store::import_commit( atk_streets_read_input( $request ), (bool) $request->get_param( 'add_new' ) ) );
+}
+
+/* -------------------------------------------------------------------- */
+/* Dashboard tab                                                        */
+/* -------------------------------------------------------------------- */
+
+function atk_render_instructor_streets_tab() {
+	$path = '/assets/js/instructor-streets.js';
+	wp_enqueue_script( 'atk-nb-xlsx' ); // SheetJS, bundled (registered in inc/assets.php).
+	wp_enqueue_script( 'atk-instructor-streets', ATK_PLUGIN_URI . $path, array( 'atk-scripts-bundle', 'atk-nb-xlsx' ), filemtime( ATK_PLUGIN_DIR . $path ), true );
+	wp_add_inline_script( 'atk-instructor-streets', 'var ATK_STREETS = ' . wp_json_encode( array(
+		'restUrl'  => esc_url_raw( rest_url( 'atk/v1/' ) ),
+		'nonce'    => wp_create_nonce( 'wp_rest' ),
+		'maxPairs' => ATK_Route_Pairs::MAX_PAIRS,
+	) ) . ';', 'before' );
+	?>
+	<div id="atk-streets-root"><p class="text-gray-600">Loading streets&hellip;</p></div>
+	<?php
 }

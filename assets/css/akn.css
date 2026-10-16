@@ -1837,3 +1837,28 @@ body.akn-app,body.akn-auth{min-height:100vh}
 .akn-poi-pin-results{max-height:11rem;overflow-y:auto}
 .akn-poi-pin-results:empty{display:none}
 button.list-group-item.list-group-item-action{white-space:normal;text-align:left;overflow-wrap:anywhere}
+
+/* Streets (dashboard): the editable A to Z list and the read-only ward view. */
+.akn-streets-table td,.akn-streets-table th{overflow-wrap:anywhere}
+.akn-streets-table tr.akn-streets-letter th{background-color:var(--akn-brand-soft);color:var(--akn-brand-ink);font-weight:600;padding:.375rem .75rem;scroll-margin-top:1rem}
+.akn-streets-pair + .akn-streets-pair{margin-top:.125rem}
+.akn-streets-jump .btn.disabled{opacity:.4}
+.akn-streets-wards{display:grid;grid-template-columns:repeat(auto-fill,minmax(15rem,1fr));gap:.5rem 1rem;max-height:14rem;overflow-y:auto;padding:.25rem}
+.akn-streets-pair-row input{min-width:0;flex:1 1 0}
+.akn-streets-review td{min-width:9rem}
+@media (max-width:991.98px){
+	.akn-streets-table colgroup,.akn-streets-table thead{display:none}
+	.akn-streets-table,.akn-streets-table tbody{display:block}
+	.akn-streets-table tr{display:flex;flex-wrap:wrap;align-items:center;gap:.5rem .75rem;padding:1rem 0;border-bottom:1px dashed var(--bs-border-color)}
+	.akn-streets-table td{display:block;padding:0;border:0;width:auto;flex:1 1 40%}
+	.akn-streets-table td.akn-streets-name{flex:1 0 100%}
+	.akn-streets-table td.akn-streets-actions{margin-left:auto;flex:0 0 auto}
+	.akn-streets-table tr.akn-streets-letter{display:block;padding:0;border:0}
+	.akn-streets-table tr.akn-streets-letter th{display:block}
+}
+@media (max-width:767.98px){
+	.akn-streets-review colgroup,.akn-streets-review thead{display:none}
+	.akn-streets-review,.akn-streets-review tbody{display:block}
+	.akn-streets-review tr{display:flex;flex-wrap:wrap;gap:.5rem 1rem;padding:1rem 0;border-bottom:1px dashed var(--bs-border-color)}
+	.akn-streets-review td{display:block;padding:0;border:0;min-width:0;flex:1 0 100%}
+}

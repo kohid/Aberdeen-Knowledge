@@ -137,6 +137,18 @@ t( 'with the tick, the new street is added', $done['saved'] >= 1 && (bool) $wpdb
 $again = ATK_Street_Store::import_preview( $parsed );
 t( 'importing the same sheet again changes nothing', array( $again['summary']['new'], $again['summary']['changed'], $again['summary']['pairs_added'] ), array( 0, 0, 0 ) );
 
+// A street that is on the site already (only in the registry) is added to the list, never duplicated or renamed.
+$q1 = ATK_Nb_Store::ensure_street( "ZZ-IT QUEEN'S ROAD" );
+$q2 = ATK_Nb_Store::ensure_street( 'ZZ-IT Queens Road' );
+$reg = ATK_Street_Parser::parse_rows( array( array( 'Road', 'Ward', 'From', 'To' ), array( "ZZ-IT QUEEN'S ROAD", 'ZZ-IT Ward', 'Aaa', 'Bbb' ) ) );
+$rp  = ATK_Street_Store::import_preview( $reg );
+t( 'a registry street counts as already on the site, not new', array( $rp['summary']['new'], $rp['summary']['changed'], $rp['new_names'] ), array( 0, 1, array() ) );
+$rc = ATK_Street_Store::import_commit( $reg, false );
+t( 'it is added to the list with no tick needed', array( $rc['saved'], $rc['failed'] ), array( 1, 0 ) );
+$qs = ATK_Street_Store::get( $q1 );
+t( 'the spelled-the-same registry row was used and kept its name', array( $qs['name'], $qs['wards'] === array( $ward ), count( $qs['pairs'] ) ), array( "Zz-It Queen's Road", true, 1 ) );
+t( 'the lookalike row was left alone', ATK_Street_Store::get( $q2 )['listed'], false );
+
 /* ---- REST ---- */
 rest_get_server();
 wp_set_current_user( 0 );
