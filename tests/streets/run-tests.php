@@ -170,5 +170,55 @@ check( 'grade: a dead end is an answer in any spelling', ATK_Route_Pairs::grade(
 check( 'the answer sheet lists every answer', ATK_Route_Pairs::answer_sheet( $union ), "From: Alford Place / Holburn Street \u{2014} To: Castle Street" );
 check( 'dead end spellings share one key', array( ATK_Route_Pairs::key( 'Cul-de-sac' ), ATK_Route_Pairs::key( 'dead end' ), ATK_Route_Pairs::key( 'DEADEND' ) ), array( 'DEAD END', 'DEAD END', 'DEAD END' ) );
 
+/* ---- Researched answers ------------------------------------------------- */
+
+$research = ATK_Route_Research::parse( json_encode( array( 'streets' => array(
+	array( 'name' => 'Abbey Place', 'from' => array( 'Abbey Road' ), 'to' => array( 'Balnagask Road' ), 'confidence' => 'high', 'flags' => array() ),
+	array( 'name' => 'Union Street', 'from' => array( 'Alford Place', 'Holburn Street' ), 'to' => array( 'Castle Street' ), 'confidence' => 'medium', 'flags' => array( 'joined_gap' ) ),
+	array( 'name' => 'Hall Close', 'from' => array( 'Hall Road' ), 'to' => array( 'Dead end' ), 'confidence' => 'low', 'flags' => array( 'dead_end_to', 'bogus' ) ),
+	array( 'name' => 'Half Road', 'from' => array( 'A Road' ), 'to' => array(), 'confidence' => 'high', 'flags' => array() ),
+	array( 'name' => '', 'from' => array( 'X' ), 'to' => array( 'Y' ) ),
+	'junk',
+) ) ) );
+check( 'research keeps only usable entries', array_column( $research, 'name' ), array( 'Abbey Place', 'Union Street', 'Hall Close' ) );
+check( 'research keeps the confidence and known flags', array( $research[2]['confidence'], $research[2]['flags'] ), array( 'low', array( 'dead_end_to' ) ) );
+check( 'research that is not JSON is empty', ATK_Route_Research::parse( 'not json' ), array() );
+
+$streets = array(
+	array( 'id' => 1, 'name' => 'ABBEY PLACE', 'pairs' => array(), 'flagged' => false ),
+	array( 'id' => 2, 'name' => 'Union  Street', 'pairs' => array(), 'flagged' => false ),
+	array( 'id' => 3, 'name' => 'Hall Close', 'pairs' => array( array( 'Mine', 'Mine Two' ) ), 'flagged' => false ),
+	array( 'id' => 4, 'name' => 'Nowhere Road', 'pairs' => array(), 'flagged' => false ),
+	array( 'id' => 5, 'name' => 'Abbey Place', 'pairs' => array(), 'flagged' => true ),
+);
+$plan = ATK_Route_Research::plan( $streets, $research );
+check( 'research fills streets with no answers, matching ignoring case and spacing', array_column( $plan['fill'], 'id' ), array( 1, 2 ) );
+check( 'a filled street gets cover pairs', $plan['fill'][1]['pairs'], array( array( 'Alford Place', 'Castle Street' ), array( 'Holburn Street', 'Castle Street' ) ) );
+check( 'the source records confidence and flags', $plan['fill'][1]['src'], array( 'c' => 'medium', 'f' => array( 'joined_gap' ) ) );
+check( 'a street that already has answers is kept', $plan['kept'], 1 );
+check( 'a street awaiting clarification is left alone', $plan['clarify'], 1 );
+check( 'streets with no research are listed', $plan['no_research'], array( 'Nowhere Road' ) );
+check( 'research for streets not on the list is counted', $plan['unused'], 0 );
+$plan2 = ATK_Route_Research::plan( array( $streets[0] ), $research );
+check( 'research entries without a street on the list are counted', $plan2['unused'], 2 );
+check( 'summary counts', array( $plan['counts']['fill'], $plan['counts']['review'] ), array( 2, 0 ) );
+$plan3 = ATK_Route_Research::plan( array( array( 'id' => 9, 'name' => 'Hall Close', 'pairs' => array(), 'flagged' => false ) ), $research );
+check( 'low confidence streets are counted for review', $plan3['counts']['review'], 1 );
+
+/* ---- Points a test is worth, and what a stored review answer may carry -- */
+
+$test_questions = array(
+	array( 'street' => 'A Road', 'pairs' => array( array( 'a', 'x' ) ) ),
+	array( 'street' => 'B Road', 'pairs' => array( array( 'a', 'x' ), array( 'b', 'x' ) ) ),
+	array( 'street' => 'C Road', 'pairs' => array() ),
+);
+check( 'a test is worth the answers of all its streets', ATK_Route_Planner::test_points( $test_questions ), 5 );
+check( 'an empty test is worth nothing', ATK_Route_Planner::test_points( array() ), 0 );
+check( 'a review answer without a max carries no points', ATK_Route_Pairs::clean_result( array( 'points' => 3 ) ), array() );
+check( 'points and max are kept', ATK_Route_Pairs::clean_result( array( 'points' => '2', 'max' => '3' ) ), array( 'points' => 2, 'max' => 3 ) );
+check( 'max is capped at twice the pair limit', ATK_Route_Pairs::clean_result( array( 'points' => 5, 'max' => 999 ) ), array( 'points' => 5, 'max' => 2 * ATK_Route_Pairs::MAX_PAIRS ) );
+check( 'points never exceed max', ATK_Route_Pairs::clean_result( array( 'points' => 9, 'max' => 3 ) ), array( 'points' => 3, 'max' => 3 ) );
+check( 'negative values become zero', ATK_Route_Pairs::clean_result( array( 'points' => -4, 'max' => -2 ) ), array( 'points' => 0, 'max' => 0 ) );
+
 echo "\n$checks checks, $failures failed\n";
 exit( $failures ? 1 : 0 );

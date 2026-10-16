@@ -165,7 +165,7 @@
 		body.set( "test", ATK_QUIZ.courseTest );
 		body.set( "course_type", ATK_QUIZ.courseType || "street" );
 		body.set( "score", score );
-		body.set( "total", sessionTotal );
+		body.set( "total", scoreTotal() );
 		body.set( "nonce", ATK_QUIZ.courseNonce );
 
 		fetch( ATK_QUIZ.ajaxUrl, { method: "POST", body: body } ).catch( function () {} );
@@ -186,7 +186,7 @@
 		body.set( "action", "atk_record_review" );
 		body.set( "test", ATK_QUIZ.testKey );
 		body.set( "score", score );
-		body.set( "total", sessionTotal );
+		body.set( "total", scoreTotal() );
 		body.set( "answers", JSON.stringify( answers ) );
 		body.set( "duration", durationSeconds );
 		body.set( "nonce", ATK_QUIZ.reviewNonce );
@@ -446,17 +446,67 @@
 	}
 
 	/**
-	 * Route test answer: where the street runs From and To, two street-name fields.
-	 * $previous is the { from, to } of a question revisited with Back.
+	 * Route test answer: where the street runs From and To. There is one street-name field for
+	 * every distinct road listed at each end, and each right road is a point. A street with more
+	 * than two answers in all gets a notice saying so. $previous is the { from: [], to: [] } of a
+	 * question revisited with Back.
 	 */
-	function renderPairInputs( previous ) {
-		previous = previous || {};
-		answerAreaEl.innerHTML = '<div class="row g-5">' +
-			'<div class="col-md-6"><label class="form-label fw-bold" for="atk-quiz-from">From</label>' + roadFieldHtml( "atk-quiz-from", "Type the street" ) + "</div>" +
-			'<div class="col-md-6"><label class="form-label fw-bold" for="atk-quiz-to">To</label>' + roadFieldHtml( "atk-quiz-to", "Type the street" ) + "</div>" +
-			"</div>";
-		initRoadField( "atk-quiz-from", "Type the street", previous.from, true );
-		initRoadField( "atk-quiz-to", "Type the street", previous.to, false );
+	function routeColumnHtml( side, label, count ) {
+		var html = '<div class="col-md-6" role="group" aria-labelledby="atk-quiz-' + side + '-label">' +
+			'<div class="form-label fw-bold" id="atk-quiz-' + side + '-label">' + label +
+			( count > 1 ? ' <span class="text-gray-600 fw-normal fs-7">(' + count + " answers)</span>" : "" ) + "</div>";
+		for ( var i = 0; i < count; i++ ) {
+			html += '<div class="mb-3">' + roadFieldHtml( "atk-quiz-" + side + "-" + i, "Type the street" ) + "</div>";
+		}
+		return html + "</div>";
+	}
+
+	function renderPairInputs( q, previous ) {
+		var ends = window.ATK_ROUTE_PAIRS.ends( q.pairs );
+		var given = previous && typeof previous === "object" ? previous : {};
+		var total = ends.from.length + ends.to.length;
+		var html = "";
+		if ( total > 2 ) {
+			html += '<div class="alert alert-info mb-6" role="status" id="atk-quiz-route-notice">This street has <strong>' + total + " answers</strong> in all. " +
+				"Each right answer scores a point. Leave a box empty if you don&rsquo;t know that one.</div>";
+		}
+		html += '<div class="row g-5">' + routeColumnHtml( "from", "From", ends.from.length ) + routeColumnHtml( "to", "To", ends.to.length ) + "</div>" +
+			'<div class="form-text mt-2">You can give the two ends either way round.</div>';
+		answerAreaEl.innerHTML = html;
+		[ [ "from", ends.from.length, "From" ], [ "to", ends.to.length, "To" ] ].forEach( function ( side ) {
+			var saved = [].concat( given[ side[ 0 ] ] || [] );
+			for ( var i = 0; i < side[ 1 ]; i++ ) {
+				initRoadField( "atk-quiz-" + side[ 0 ] + "-" + i, "Type the street", saved[ i ], side[ 0 ] === "from" && i === 0 );
+				var field = document.getElementById( "atk-quiz-" + side[ 0 ] + "-" + i );
+				if ( field ) {
+					field.setAttribute( "aria-label", side[ 2 ] + ( side[ 1 ] > 1 ? ", answer " + ( i + 1 ) + " of " + side[ 1 ] : "" ) );
+				}
+			}
+		} );
+	}
+
+	/** What the student typed in the Route test's fields, From and To. */
+	function readPairInputs( q ) {
+		var ends = window.ATK_ROUTE_PAIRS.ends( q.pairs );
+		var given = { from: [], to: [] };
+		[ [ "from", ends.from.length ], [ "to", ends.to.length ] ].forEach( function ( side ) {
+			for ( var i = 0; i < side[ 1 ]; i++ ) {
+				var field = document.getElementById( "atk-quiz-" + side[ 0 ] + "-" + i );
+				given[ side[ 0 ] ].push( field ? field.value : "" );
+			}
+		} );
+		return given;
+	}
+
+	/** The Route test's total: a point for every distinct answer, not one per street. */
+	function scoreTotal() {
+		if ( mode !== "pair" ) {
+			return sessionTotal;
+		}
+		return sessionQuestions.reduce( function ( sum, q ) {
+			var e = window.ATK_ROUTE_PAIRS.ends( q.pairs );
+			return sum + e.from.length + e.to.length;
+		}, 0 );
 	}
 
 	function renderQuestion() {
@@ -482,7 +532,7 @@
 		if ( mode === "text" ) {
 			renderTextAnswerInput( previous ? previous.rawGiven : "" );
 		} else if ( mode === "pair" ) {
-			renderPairInputs( previous ? previous.rawGiven : null );
+			renderPairInputs( q, previous ? previous.rawGiven : null );
 		} else {
 			var html = "";
 			q.options.forEach( function ( option, i ) {
@@ -522,23 +572,20 @@
 		}
 
 		if ( mode === "pair" ) {
-			var fromEl = document.getElementById( "atk-quiz-from" );
-			var toEl   = document.getElementById( "atk-quiz-to" );
-			var from   = fromEl ? fromEl.value : "";
-			var to     = toEl ? toEl.value : "";
-			var shown  = "(no answer)";
-			if ( from && to ) {
-				shown = escapeHtml( from ) + " to " + escapeHtml( to );
-			} else if ( from || to ) {
-				shown = "(only one box filled) " + escapeHtml( from || to );
-			}
-
+			var given  = readPairInputs( q );
+			var result = window.ATK_ROUTE_PAIRS.grade( q.pairs, given.from, given.to );
+			var typed  = function ( list ) {
+				var filled = list.filter( function ( v ) { return String( v ).trim() !== ""; } );
+				return filled.length ? escapeHtml( filled.join( ", " ) ) : "(no answer)";
+			};
 			return {
 				prompt: q.prompt,
-				given: shown,
-				correctText: escapeHtml( window.ATK_ROUTE_PAIRS.label( q.pairs ) ),
-				correct: window.ATK_ROUTE_PAIRS.matches( from, to, q.pairs ),
-				rawGiven: { from: from, to: to }
+				given: "From: " + typed( given.from ) + " &mdash; To: " + typed( given.to ),
+				correctText: escapeHtml( window.ATK_ROUTE_PAIRS.answerSheet( q.pairs ) ),
+				correct: result.points === result.max,
+				points: result.points,
+				max: result.max,
+				rawGiven: given
 			};
 		}
 
@@ -576,6 +623,9 @@
 	}
 
 	function computeScore() {
+		if ( mode === "pair" ) {
+			return answers.reduce( function ( sum, a ) { return sum + ( a ? a.points || 0 : 0 ); }, 0 );
+		}
 		return answers.filter( function ( a ) { return a && a.correct; } ).length;
 	}
 
@@ -608,6 +658,10 @@
 		questionEl.classList.add( "d-none" );
 		resultsEl.classList.remove( "d-none" );
 		scoreEl.textContent = score;
+		var outOfEl = document.getElementById( "atk-quiz-out-of" );
+		if ( outOfEl && mode === "pair" ) {
+			outOfEl.textContent = "out of " + scoreTotal() + " points";
+		}
 		// remainingSeconds was last set by the tick that either ran the clock
 		// out (0, i.e. the full allowance elapsed) or by whichever tick most
 		// recently ran before the user submitted early — accurate to within
@@ -623,7 +677,7 @@
 			}
 		} else {
 			var passFailEl = document.getElementById( "atk-quiz-pass-fail" );
-			var passed = ( score / sessionTotal ) >= ATK_QUIZ.passThreshold;
+			var passed = ( score / scoreTotal() ) >= ATK_QUIZ.passThreshold;
 			passFailEl.textContent = passed ? "Passed" : "Fail";
 			passFailEl.className = "badge fs-5 px-4 py-2 " + ( passed ? "badge-success" : "badge-danger" );
 		}
@@ -647,6 +701,13 @@
 			var cardClass  = a.correct ? "bg-light-success" : "bg-light-danger";
 			var badgeClass = a.correct ? "badge-success" : "badge-danger";
 			var badgeText  = a.correct ? "Correct" : "Incorrect";
+			if ( mode === "pair" ) {
+				// A point for every right answer, so a street can be part right.
+				var partial = ! a.correct && a.points > 0;
+				cardClass  = a.correct ? "bg-light-success" : ( partial ? "bg-light-warning" : "bg-light-danger" );
+				badgeClass = a.correct ? "badge-success" : ( partial ? "badge-warning" : "badge-danger" );
+				badgeText  = a.points + " / " + a.max;
+			}
 			html += '<div class="rounded ' + cardClass + ' p-5 mb-4">' +
 				'<div class="d-flex align-items-center justify-content-between mb-2">' +
 				'<div class="fw-bold text-gray-700">Question ' + ( i + 1 ) + "</div>" +
@@ -654,7 +715,7 @@
 				"</div>" +
 				'<div class="fs-6 text-gray-900 mb-2">' + a.prompt + "</div>" +
 				'<div class="fs-7 text-gray-600' + ( a.correct ? "" : " mb-3" ) + '">Your answer: ' + a.given + "</div>" +
-				( a.correct ? "" : '<span class="atk-answer-pill bg-success fs-7">Correct answer: ' + a.correctText + "</span>" ) +
+				( a.correct ? "" : '<span class="atk-answer-pill bg-success fs-7">' + ( mode === "pair" ? "Every answer: " : "Correct answer: " ) + a.correctText + "</span>" ) +
 				"</div>";
 		} );
 		reviewEl.innerHTML = html;

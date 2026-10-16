@@ -216,7 +216,7 @@ function atk_render_quiz( $key, $test = null, $questions = null, $extra = array(
 					<div class="card-body text-center py-15">
 						<h1 class="fs-2x fw-bolder text-gray-900 mb-3"><?php echo $is_study ? 'Study Session Complete' : 'Test Complete'; ?></h1>
 						<div class="fs-3x fw-bolder text-primary mb-2" id="atk-quiz-score"></div>
-						<p class="fs-5 text-gray-600 mb-3">out of <?php echo esc_html( $question_count ); ?> correct</p>
+						<p class="fs-5 text-gray-600 mb-3" id="atk-quiz-out-of">out of <?php echo esc_html( $question_count ); ?> correct</p>
 						<div class="mb-8" id="atk-quiz-pass-fail-wrap">
 							<span class="badge fs-5 px-4 py-2" id="atk-quiz-pass-fail"></span>
 						</div>

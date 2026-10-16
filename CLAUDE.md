@@ -260,7 +260,17 @@ a street in two wards appears under both).
   other unknown ward, or with no ward, are listed as left out and never guessed. Existing weeks are untouched unless "rewrite" is
   ticked, and a rewrite deletes only rows with a `street` (older multiple-choice rows stay in the table but are no longer read).
   Weeks already made keep their copy of the pairs, so after editing pairs run the card again with "rewrite" ticked.
-- **Quiz**: the Route course test uses quiz mode `pair` (two Select2 street fields, From and To; no map). The mockup Route Test
+- **Per-answer points (v1.5.0)**: a street's pairs are read as ends: the distinct From answers and distinct To answers
+  (`ATK_Route_Pairs::ends`). The quiz shows one field per answer on each side, each correct answer scores 1 point (either order,
+  best of straight/swapped, a repeat counts once, blanks allowed), a notice tells the student when a street has several answers,
+  and the pass mark is 75 percent of points. "Dead end" (also Cul de sac) is an answer. Points per test come from
+  `atk_course_test_max_points()`; the server recomputes the course total and clamps scores (`atk_attempt_limits()['points']`).
+  Existing saved results keep their old scoring. Mockup Route Test is unchanged.
+- **Researched answers**: `assets/data/route-research.json` (2,167 streets, built from real OpenStreetMap geometry by
+  `tools/route-research/`; confidence high/medium/low and flags) fills streets that have no pairs, from the Streets tab card.
+  It writes `routes` plus `route_src` (`ATK_DB_VERSION` 8); editing a street's pairs clears `route_src`, so the "Researched" /
+  "Review" badges mean "not yet checked by an instructor". Never invent answers; clarify streets are not in the file.
+- **Quiz**: the Route course test uses quiz mode `pair` (one From and one To field per answer; no map). The mockup Route Test
   is unchanged (multiple choice). The review lists every accepted pair.
 - **Tests**: pure rules in `tests/streets/run-tests.php`, WordPress checks in `tests/streets/integration.php`.
 

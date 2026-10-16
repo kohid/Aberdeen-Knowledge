@@ -190,6 +190,19 @@ class ATK_Route_Pairs {
 		return 'From: ' . implode( ' / ', $ends['from'] ) . ' — To: ' . implode( ' / ', $ends['to'] );
 	}
 
+	/**
+	 * The `points` and `max` a stored review answer may carry. Anything without a `max`
+	 * carries neither. A street holds at most two answers per pair, so `max` is capped there.
+	 */
+	public static function clean_result( array $raw ) {
+		if ( ! isset( $raw['max'] ) ) {
+			return array();
+		}
+		$max    = max( 0, min( 2 * self::MAX_PAIRS, (int) $raw['max'] ) );
+		$points = max( 0, min( $max, isset( $raw['points'] ) ? (int) $raw['points'] : 0 ) );
+		return array( 'points' => $points, 'max' => $max );
+	}
+
 	/** Every pair, for the Course Builder and the review: "A to B / C to D". */
 	public static function label_all( array $pairs ) {
 		return implode( ' / ', array_map( array( __CLASS__, 'label' ), array_values( array_filter( $pairs, 'is_array' ) ) ) );
@@ -371,6 +384,112 @@ class ATK_Street_Parser {
 	}
 }
 
+/**
+ * Researched answers: From/To for each street, worked out from real OpenStreetMap data
+ * (assets/data/route-research.json). Filling only ever adds answers to a street that has
+ * none; an instructor's own answers are never replaced, and a street awaiting clarification
+ * is left alone.
+ */
+class ATK_Route_Research {
+
+	/** Flags a research entry may carry, so the file cannot put anything else on screen. */
+	const FLAGS = array( 'joined_gap', 'branched', 'loop', 'dead_end_from', 'dead_end_to', 'ambiguous_segments', 'snapped_end', 'far_from_postcode', 'single_end' );
+
+	/**
+	 * Reads the research file's JSON into clean entries: name, from[], to[], confidence, flags[].
+	 * An entry needs a name and at least one answer at each end.
+	 *
+	 * @return array[]
+	 */
+	public static function parse( $json ) {
+		$data = json_decode( (string) $json, true );
+		$out  = array();
+		if ( ! is_array( $data ) || empty( $data['streets'] ) || ! is_array( $data['streets'] ) ) {
+			return $out;
+		}
+		$list = function ( $value ) {
+			$items = array();
+			foreach ( is_array( $value ) ? $value : array() as $item ) {
+				$item = is_scalar( $item ) ? trim( preg_replace( '/\s+/u', ' ', (string) $item ) ) : '';
+				if ( '' !== $item ) {
+					$items[] = mb_substr( $item, 0, ATK_Route_Pairs::MAX_LENGTH, 'UTF-8' );
+				}
+			}
+			return $items;
+		};
+		foreach ( $data['streets'] as $entry ) {
+			if ( ! is_array( $entry ) ) {
+				continue;
+			}
+			$name = isset( $entry['name'] ) && is_scalar( $entry['name'] ) ? trim( (string) $entry['name'] ) : '';
+			$from = $list( isset( $entry['from'] ) ? $entry['from'] : array() );
+			$to   = $list( isset( $entry['to'] ) ? $entry['to'] : array() );
+			if ( '' === $name || ! $from || ! $to ) {
+				continue;
+			}
+			$confidence = isset( $entry['confidence'] ) && in_array( $entry['confidence'], array( 'high', 'medium', 'low' ), true ) ? $entry['confidence'] : 'medium';
+			$flags      = array_values( array_intersect( self::FLAGS, isset( $entry['flags'] ) && is_array( $entry['flags'] ) ? $entry['flags'] : array() ) );
+			$out[]      = array( 'name' => $name, 'from' => $from, 'to' => $to, 'confidence' => $confidence, 'flags' => $flags );
+		}
+		return $out;
+	}
+
+	/**
+	 * What filling would do. $streets: id, name, pairs, flagged. A street is matched to its
+	 * research by name, ignoring case, spacing and punctuation.
+	 *
+	 * @return array{fill: array[], kept: int, clarify: int, no_research: string[], unused: int, counts: array}
+	 */
+	public static function plan( array $streets, array $research ) {
+		$index = array();
+		foreach ( $research as $entry ) {
+			$index[ ATK_Nb_Parser::normalise_name( $entry['name'] ) ] = $entry;
+		}
+		$used   = array();
+		$fill   = array();
+		$kept   = 0;
+		$clarify = 0;
+		$none   = array();
+		$review = 0;
+		foreach ( $streets as $street ) {
+			$key   = ATK_Nb_Parser::normalise_name( $street['name'] );
+			$entry = isset( $index[ $key ] ) ? $index[ $key ] : null;
+			if ( ! empty( $street['flagged'] ) ) {
+				if ( $entry ) {
+					$used[ $key ] = true;
+					$clarify++;
+				}
+				continue;
+			}
+			if ( ! $entry ) {
+				$none[] = $street['name'];
+				continue;
+			}
+			$used[ $key ] = true;
+			if ( ! empty( $street['pairs'] ) ) {
+				$kept++;
+				continue;
+			}
+			$pairs = ATK_Route_Pairs::clean( ATK_Route_Pairs::cover( $entry['from'], $entry['to'] ) );
+			if ( ! $pairs ) {
+				continue;
+			}
+			$fill[] = array( 'id' => (int) $street['id'], 'name' => $street['name'], 'pairs' => $pairs, 'src' => array( 'c' => $entry['confidence'], 'f' => $entry['flags'] ) );
+			if ( 'low' === $entry['confidence'] ) {
+				$review++;
+			}
+		}
+		return array(
+			'fill'        => $fill,
+			'kept'        => $kept,
+			'clarify'     => $clarify,
+			'no_research' => $none,
+			'unused'      => max( 0, count( $index ) - count( $used ) ),
+			'counts'      => array( 'fill' => count( $fill ), 'review' => $review ),
+		);
+	}
+}
+
 class ATK_Route_Planner {
 
 	const TESTS_PER_WEEK = 5;
@@ -394,6 +513,15 @@ class ATK_Route_Planner {
 	 */
 	public static function ward_match_key( $ward ) {
 		return preg_replace( '/\bstreet\b/u', 'st', ATK_Poi_Parser::ward_key( $ward ) );
+	}
+
+	/** What a test is worth: every distinct answer of every street asked in it is one point. */
+	public static function test_points( array $questions ) {
+		$total = 0;
+		foreach ( $questions as $question ) {
+			$total += ATK_Route_Pairs::points( isset( $question['pairs'] ) ? $question['pairs'] : array() );
+		}
+		return $total;
 	}
 
 	/** A test lasts 20 minutes, or one minute a question when it is longer than that. */

@@ -14,7 +14,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-const ATK_DB_VERSION = 7;
+const ATK_DB_VERSION = 8;
 
 function atk_table( $name ) {
 	global $wpdb;
@@ -145,6 +145,7 @@ function atk_maybe_install_db() {
 		listed TINYINT(1) NOT NULL DEFAULT 0,
 		flagged TINYINT(1) NOT NULL DEFAULT 0,
 		routes TEXT NULL,
+		route_src TEXT NULL,
 		PRIMARY KEY  (id),
 		UNIQUE KEY name (name)
 	) $charset_collate;";

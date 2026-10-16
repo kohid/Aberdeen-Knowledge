@@ -264,7 +264,12 @@ function atk_handle_course_complete() {
 
 	$total = isset( $_POST['total'] ) ? (int) $_POST['total'] : 0;
 	$score = isset( $_POST['score'] ) ? (int) $_POST['score'] : 0;
-	$total = max( 0, min( atk_course_test_max_questions( $type, $week_num, $test_num ), $total ) );
+	if ( 'route' === $type ) {
+		// Scored in points, and the most a test is worth is known exactly from the test itself: never trust the browser's total.
+		$total = atk_course_test_max_points( $type, $week_num, $test_num );
+	} else {
+		$total = max( 0, min( atk_course_test_max_questions( $type, $week_num, $test_num ), $total ) );
+	}
 	$score = max( 0, min( $total, $score ) );
 
 	atk_course_record_result( $user_id, $type, $week_num, $test_num, $score, $total );
@@ -294,6 +299,20 @@ function atk_course_test_max_questions( $type, $week_num, $test_num ) {
 	$weeks = atk_course_weeks( 'route' );
 	$count = isset( $weeks[ $week_num - 1 ]['tests'][ $test_num - 1 ] ) ? count( $weeks[ $week_num - 1 ]['tests'][ $test_num - 1 ] ) : 0;
 	return max( ATK_COURSE_QUESTIONS_PER_TEST, $count );
+}
+
+/**
+ * The points a course test is worth. The Official Route test scores a point for every distinct
+ * From and To answer, so it is worth the answers of the streets saved in it; every other test
+ * scores a point a question.
+ */
+function atk_course_test_max_points( $type, $week_num, $test_num ) {
+	$type = atk_course_type_or_default( $type );
+	if ( 'route' !== $type ) {
+		return ATK_COURSE_QUESTIONS_PER_TEST;
+	}
+	$weeks = atk_course_weeks( 'route' );
+	return isset( $weeks[ $week_num - 1 ]['tests'][ $test_num - 1 ] ) ? ATK_Route_Planner::test_points( $weeks[ $week_num - 1 ]['tests'][ $test_num - 1 ] ) : 0;
 }
 
 /** Questions in a whole track: 20 a test, or the questions really saved for the Official Route test. */

@@ -39,13 +39,14 @@ function atk_is_valid_attempt_key( $test_key ) {
  * test is 30 questions at most and ATK_QUIZ_MINUTES long, except the Official Route test,
  * whose tests are as long as the streets saved in them (see atk_course_test_max_questions()).
  *
- * @return array{questions:int,minutes:int}
+ * @return array{questions:int,points:int,minutes:int}
  */
 function atk_attempt_limits( $test_key ) {
-	$limits = array( 'questions' => 30, 'minutes' => ATK_QUIZ_MINUTES );
+	$limits = array( 'questions' => 30, 'points' => 30, 'minutes' => ATK_QUIZ_MINUTES );
 	if ( preg_match( '/^course-route-w(\d+)-t(\d+)$/', (string) $test_key, $m ) && function_exists( 'atk_course_test_max_questions' ) ) {
 		$count = atk_course_test_max_questions( 'route', (int) $m[1], (int) $m[2] );
 		$limits['questions'] = max( 30, $count );
+		$limits['points']    = max( 30, atk_course_test_max_points( 'route', (int) $m[1], (int) $m[2] ) ); // the Official Route test scores a point per answer
 		$limits['minutes']   = atk_course_test_minutes( 'route', (int) $m[1], (int) $m[2] );
 	}
 	return $limits;
@@ -124,7 +125,7 @@ function atk_handle_record_review() {
 	$total    = isset( $_POST['total'] ) ? (int) $_POST['total'] : 0;
 	$score    = isset( $_POST['score'] ) ? (int) $_POST['score'] : 0;
 	$limits   = atk_attempt_limits( $test_key );
-	$total    = max( 0, min( $limits['questions'], $total ) );
+	$total    = max( 0, min( $limits['points'], $total ) );
 	$score    = max( 0, min( $total, $score ) );
 	// Clamped to double the test's real allowance as a sanity ceiling — a
 	// client-reported value, never trusted outright.
@@ -149,7 +150,7 @@ function atk_handle_record_review() {
 			'given'       => sanitize_text_field( isset( $raw['given'] ) ? (string) $raw['given'] : '' ),
 			'correctText' => sanitize_text_field( isset( $raw['correctText'] ) ? (string) $raw['correctText'] : '' ),
 			'correct'     => ! empty( $raw['correct'] ),
-		);
+		) + ATK_Route_Pairs::clean_result( $raw ); // the Official Route test also keeps points and max, see assets/js/quiz.js
 	}
 
 	atk_record_attempt_review( get_current_user_id(), $test_key, $score, $total, $answers, $duration );
@@ -225,17 +226,23 @@ function atk_render_attempt_meta_line( $attempt, $position, $total_shown ) {
 function atk_render_attempt_review_cards( $attempt ) {
 	ob_start();
 	foreach ( $attempt['answers'] as $qi => $a ) :
-		$correct = ! empty( $a['correct'] );
+		$correct    = ! empty( $a['correct'] );
+		// Official Route answers carry points: a part-right street shows amber with "2 / 3".
+		$has_points = isset( $a['max'] );
+		$partial    = $has_points && ! $correct && (int) $a['points'] > 0;
+		$card_class = $correct ? 'bg-light-success' : ( $partial ? 'bg-light-warning' : 'bg-light-danger' );
+		$badge_cls  = $correct ? 'badge-success' : ( $partial ? 'badge-warning' : 'badge-danger' );
+		$badge_text = $has_points ? (int) $a['points'] . ' / ' . (int) $a['max'] : ( $correct ? 'Correct' : 'Incorrect' );
 		?>
-		<div class="rounded <?php echo $correct ? 'bg-light-success' : 'bg-light-danger'; ?> p-5 mb-4">
+		<div class="rounded <?php echo esc_attr( $card_class ); ?> p-5 mb-4">
 			<div class="d-flex align-items-center justify-content-between mb-2">
 				<div class="fw-bold text-gray-700">Question <?php echo esc_html( $qi + 1 ); ?></div>
-				<span class="badge <?php echo $correct ? 'badge-success' : 'badge-danger'; ?>"><?php echo $correct ? 'Correct' : 'Incorrect'; ?></span>
+				<span class="badge <?php echo esc_attr( $badge_cls ); ?>"><?php echo esc_html( $badge_text ); ?></span>
 			</div>
 			<div class="fs-6 text-gray-900 mb-2"><?php echo wp_kses_post( $a['prompt'] ); ?></div>
 			<div class="fs-7 text-gray-600<?php echo $correct ? '' : ' mb-3'; ?>">Your answer: <?php echo esc_html( $a['given'] ? $a['given'] : '(no answer)' ); ?></div>
 			<?php if ( ! $correct ) : ?>
-				<span class="atk-answer-pill bg-success fs-7">Correct answer: <?php echo esc_html( $a['correctText'] ); ?></span>
+				<span class="atk-answer-pill bg-success fs-7"><?php echo $has_points ? 'Every answer: ' : 'Correct answer: '; ?><?php echo esc_html( $a['correctText'] ); ?></span>
 			<?php endif; ?>
 		</div>
 	<?php endforeach;

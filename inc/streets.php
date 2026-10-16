@@ -49,7 +49,16 @@ class ATK_Street_Store {
 			'flagged'   => (bool) (int) $row->flagged,
 			'pairs'     => $pairs,
 			'listed'    => (bool) (int) $row->listed,
+			'research'  => null,
 		);
+		// Answers filled from the research file carry a marker until an instructor changes them.
+		$src = self::decode_list( isset( $row->route_src ) ? $row->route_src : '' );
+		if ( $pairs && isset( $src['c'] ) && in_array( $src['c'], array( 'high', 'medium', 'low' ), true ) ) {
+			$entry['research'] = array(
+				'confidence' => $src['c'],
+				'flags'      => array_values( array_intersect( ATK_Route_Research::FLAGS, isset( $src['f'] ) && is_array( $src['f'] ) ? $src['f'] : array() ) ),
+			);
+		}
 		$entry['status'] = ATK_Route_Planner::status( $entry );
 		return $entry;
 	}
@@ -59,7 +68,7 @@ class ATK_Street_Store {
 		global $wpdb;
 		ATK_Nb_Store::sync_streets();
 		$links = ATK_Nb_Store::street_link_map();
-		$rows  = $wpdb->get_results( 'SELECT id, name, outcode, postcodes, note, listed, flagged, routes FROM ' . self::table() . ' WHERE listed = 1 OR id IN (SELECT DISTINCT street_id FROM ' . atk_table( 'nb_links' ) . ')' );
+		$rows  = $wpdb->get_results( 'SELECT id, name, outcode, postcodes, note, listed, flagged, routes, route_src FROM ' . self::table() . ' WHERE listed = 1 OR id IN (SELECT DISTINCT street_id FROM ' . atk_table( 'nb_links' ) . ')' );
 		$out   = array();
 		foreach ( (array) $rows as $row ) {
 			$out[] = self::entry( $row, isset( $links[ (int) $row->id ] ) ? $links[ (int) $row->id ] : array() );
@@ -72,7 +81,7 @@ class ATK_Street_Store {
 
 	public static function get( $id ) {
 		global $wpdb;
-		$row = $wpdb->get_row( $wpdb->prepare( 'SELECT id, name, outcode, postcodes, note, listed, flagged, routes FROM ' . self::table() . ' WHERE id = %d', (int) $id ) );
+		$row = $wpdb->get_row( $wpdb->prepare( 'SELECT id, name, outcode, postcodes, note, listed, flagged, routes, route_src FROM ' . self::table() . ' WHERE id = %d', (int) $id ) );
 		if ( ! $row ) {
 			return null;
 		}
@@ -184,6 +193,9 @@ class ATK_Street_Store {
 		if ( isset( $input['pairs'] ) ) {
 			$pairs            = ATK_Route_Pairs::clean( $input['pairs'] );
 			$fields['routes'] = $pairs ? wp_json_encode( $pairs ) : null;
+			if ( ! $row || $pairs !== $row['pairs'] ) {
+				$fields['route_src'] = null; // an instructor changed the answers: they are no longer the researched ones
+			}
 		}
 
 		$wpdb->query( 'START TRANSACTION' );
@@ -212,7 +224,7 @@ class ATK_Street_Store {
 			return false;
 		}
 		$wpdb->delete( atk_table( 'nb_links' ), array( 'street_id' => $id ), array( '%d' ) );
-		$wpdb->update( self::table(), array( 'listed' => 0, 'flagged' => 0, 'routes' => null ), array( 'id' => $id ) );
+		$wpdb->update( self::table(), array( 'listed' => 0, 'flagged' => 0, 'routes' => null, 'route_src' => null ), array( 'id' => $id ) );
 		return true;
 	}
 
@@ -385,6 +397,48 @@ class ATK_Street_Store {
 			}
 		}
 		return array( 'saved' => $saved, 'failed' => $failed, 'left_out' => $left, 'summary' => $plan['summary'] );
+	}
+
+	/* ---------------------------------------------------------------- */
+	/* Researched answers                                                */
+	/* ---------------------------------------------------------------- */
+
+	/** The researched entries from assets/data/route-research.json (empty if the file is missing). */
+	public static function research() {
+		static $entries = null;
+		if ( null === $entries ) {
+			$path    = ATK_PLUGIN_DIR . '/assets/data/route-research.json';
+			$entries = is_readable( $path ) ? ATK_Route_Research::parse( (string) file_get_contents( $path ) ) : array();
+		}
+		return $entries;
+	}
+
+	/** What "Fill answers from research" would do, without changing anything. */
+	public static function research_preview() {
+		$streets = array_map( function ( $street ) {
+			return array( 'id' => $street['id'], 'name' => $street['name'], 'pairs' => $street['pairs'], 'flagged' => $street['flagged'] );
+		}, self::all() );
+		$plan          = ATK_Route_Research::plan( $streets, self::research() );
+		$plan['total'] = count( self::research() );
+		return $plan;
+	}
+
+	/** Adds the researched answers to the streets that have none. Never replaces answers an instructor has. */
+	public static function research_apply() {
+		global $wpdb;
+		$plan   = self::research_preview();
+		$filled = 0;
+		foreach ( $plan['fill'] as $item ) {
+			$done = $wpdb->update(
+				self::table(),
+				array( 'routes' => wp_json_encode( $item['pairs'] ), 'route_src' => wp_json_encode( $item['src'] ) ),
+				array( 'id' => $item['id'] )
+			);
+			if ( false !== $done ) {
+				$filled++;
+			}
+		}
+		return array( 'filled' => $filled, 'failed' => count( $plan['fill'] ) - $filled, 'kept' => $plan['kept'], 'clarify' => $plan['clarify'], 'no_research' => count( $plan['no_research'] ) );
 	}
 
 	/* ---------------------------------------------------------------- */
@@ -602,15 +656,74 @@ function atk_streets_rest_import_commit( WP_REST_Request $request ) {
 function atk_render_instructor_streets_tab() {
 	$path = '/assets/js/instructor-streets.js';
 	wp_enqueue_script( 'atk-nb-xlsx' ); // SheetJS, bundled (registered in inc/assets.php).
-	wp_enqueue_script( 'atk-instructor-streets', ATK_PLUGIN_URI . $path, array( 'atk-scripts-bundle', 'atk-nb-xlsx' ), filemtime( ATK_PLUGIN_DIR . $path ), true );
+	wp_enqueue_script( 'atk-route-pairs', ATK_PLUGIN_URI . '/assets/js/route-pairs.js', array(), filemtime( ATK_PLUGIN_DIR . '/assets/js/route-pairs.js' ), true ); // shows each street's From and To answers
+	wp_enqueue_script( 'atk-instructor-streets', ATK_PLUGIN_URI . $path, array( 'atk-scripts-bundle', 'atk-nb-xlsx', 'atk-route-pairs' ), filemtime( ATK_PLUGIN_DIR . $path ), true );
 	wp_add_inline_script( 'atk-instructor-streets', 'var ATK_STREETS = ' . wp_json_encode( array(
 		'restUrl'  => esc_url_raw( rest_url( 'atk/v1/' ) ),
 		'nonce'    => wp_create_nonce( 'wp_rest' ),
 		'maxPairs' => ATK_Route_Pairs::MAX_PAIRS,
 	) ) . ';', 'before' );
 	?>
+	<?php atk_render_streets_research_card(); ?>
 	<div id="atk-streets-root"><p class="text-gray-600">Loading streets&hellip;</p></div>
 	<?php
+}
+
+/**
+ * The card above the Streets list: fill the From and To answers researched from OpenStreetMap
+ * into the streets that have none. A preview first; nothing changes until the button is pressed.
+ */
+function atk_render_streets_research_card() {
+	$plan = ATK_Street_Store::research_preview();
+	$fill = count( $plan['fill'] );
+	$done = isset( $_GET['research_fill'] ); // phpcs:ignore WordPress.Security.NonceVerification
+	?>
+	<div class="card mb-6" id="atk-streets-research-card">
+		<div class="card-header">
+			<h2 class="card-title fs-4">Researched answers</h2>
+		</div>
+		<div class="card-body">
+			<p class="text-gray-600 mb-3">We looked up where each street runs from and to in OpenStreetMap (<?php echo esc_html( number_format_i18n( $plan['total'] ) ); ?> streets). Filling adds those answers to the streets that have none yet; it never changes a street that already has answers or one marked <em>Needs clarification</em>. They are a starting point: check them against the real map and edit any that are wrong. Streets that need a second look are marked <strong>Review</strong>, and a street's mark clears once you change its answers.</p>
+
+			<?php if ( $done ) : ?>
+				<div class="alert alert-success d-flex align-items-center p-5 mb-5" role="status"><span>
+					<?php
+					printf(
+						'Done. %1$s filled, %2$s left as they were, %3$s not saved.',
+						esc_html( number_format_i18n( isset( $_GET['filled'] ) ? (int) $_GET['filled'] : 0 ) . ' streets' ), // phpcs:ignore WordPress.Security.NonceVerification
+						esc_html( number_format_i18n( isset( $_GET['kept'] ) ? (int) $_GET['kept'] : 0 ) . ' streets' ), // phpcs:ignore WordPress.Security.NonceVerification
+						esc_html( number_format_i18n( isset( $_GET['failed'] ) ? (int) $_GET['failed'] : 0 ) . ' streets' ) // phpcs:ignore WordPress.Security.NonceVerification
+					);
+					?>
+				</span></div>
+			<?php endif; ?>
+
+			<ul class="list-unstyled text-gray-700 mb-5">
+				<li><strong><?php echo esc_html( number_format_i18n( $fill ) ); ?></strong> streets would be filled<?php echo $plan['counts']['review'] ? ' (' . esc_html( number_format_i18n( $plan['counts']['review'] ) ) . ' marked Review)' : ''; ?>.</li>
+				<li><?php echo esc_html( number_format_i18n( $plan['kept'] ) ); ?> already have answers and stay as they are.</li>
+				<li><?php echo esc_html( number_format_i18n( $plan['clarify'] ) ); ?> need clarification and are skipped.</li>
+				<li><?php echo esc_html( number_format_i18n( count( $plan['no_research'] ) ) ); ?> streets on your list have no researched answer.</li>
+				<li><?php echo esc_html( number_format_i18n( $plan['unused'] ) ); ?> researched streets are not on your list yet, so they are not added.</li>
+			</ul>
+
+			<form method="post" action="<?php echo esc_url( admin_url( 'admin-ajax.php' ) ); ?>">
+				<input type="hidden" name="action" value="atk_instructor_fill_route_research" />
+				<?php wp_nonce_field( ATK_INSTRUCTOR_NONCE_ACTION, 'atk_nonce' ); ?>
+				<button type="submit" class="btn btn-primary"<?php echo $fill ? '' : ' disabled'; ?>><?php echo $fill ? 'Fill answers from research' : 'Nothing to fill'; ?></button>
+			</form>
+		</div>
+	</div>
+	<?php
+}
+
+add_action( 'wp_ajax_atk_instructor_fill_route_research', 'atk_handle_instructor_fill_route_research' );
+function atk_handle_instructor_fill_route_research() {
+	atk_instructor_verify_request();
+	$result = ATK_Street_Store::research_apply();
+	atk_instructor_redirect_back( array(
+		'tab' => 'streets', 'research_fill' => 1,
+		'filled' => $result['filled'], 'kept' => $result['kept'], 'failed' => $result['failed'],
+	) );
 }
 
 /* -------------------------------------------------------------------- */

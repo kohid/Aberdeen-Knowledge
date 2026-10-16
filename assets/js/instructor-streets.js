@@ -100,9 +100,29 @@
 		return "<span class=\"badge badge-light-" + tone + " fs-7\">" + esc( text ) + "</span>";
 	}
 
+	var FLAG_LABEL = {
+		joined_gap: "Joined across a gap in OpenStreetMap, check both ends",
+		branched: "The street branches, check the two ends",
+		loop: "The street loops back on itself",
+		dead_end_from: "One end is a dead end",
+		dead_end_to: "One end is a dead end",
+		ambiguous_segments: "The name appears more than once nearby",
+		snapped_end: "An end is not connected in OpenStreetMap",
+		far_from_postcode: "Far from its postcode",
+		single_end: "Only one end could be found"
+	};
+
+	/** The status, plus a Researched or Review mark for answers filled from the research file and not yet edited. */
 	function statusBadge( street ) {
 		var s = STATUS[ street.status ];
-		return badge( s.label, s.tone );
+		var html = badge( s.label, s.tone );
+		if ( street.research ) {
+			var review = street.research.confidence === "low";
+			var why = ( review ? "Less certain, check these answers. " : "Filled from OpenStreetMap research; check them. " ) +
+				( street.research.flags || [] ).map( function ( f ) { return FLAG_LABEL[ f ] || f; } ).filter( function ( x, i, a ) { return a.indexOf( x ) === i; } ).join( ". " );
+			html += " <span class=\"badge badge-light-" + ( review ? "warning" : "info" ) + " fs-7\" title=\"" + esc( why.trim() ) + "\">" + ( review ? "Review" : "Researched" ) + "</span>";
+		}
+		return html;
 	}
 
 	function wardName( id ) {
@@ -198,7 +218,7 @@
 									"<div class=\"form-text mt-0 mb-3\">Tick two wards for a street that crosses a boundary.</div>" +
 									"<div id=\"atk-streets-f-wards\" class=\"akn-streets-wards\" role=\"group\" aria-labelledby=\"atk-streets-f-wards-label\"></div></div>" +
 								"<div class=\"col-12\"><div class=\"form-label fw-semibold\" id=\"atk-streets-f-pairs-label\">Where the route runs: From and To</div>" +
-									"<div class=\"form-text mt-0 mb-3\" id=\"atk-streets-f-pairs-help\">A driver is marked right for any pair listed here, in either order. Add a pair for each way the street can be described, up to " + MAX_PAIRS + ".</div>" +
+									"<div class=\"form-text mt-0 mb-3\" id=\"atk-streets-f-pairs-help\">The driver gets a box, and a point, for each different From road and each different To road listed here, in either order. Add a pair to include another road, up to " + MAX_PAIRS + ".</div>" +
 									"<div id=\"atk-streets-f-pairs\" role=\"group\" aria-labelledby=\"atk-streets-f-pairs-label\" aria-describedby=\"atk-streets-f-pairs-help\"></div>" +
 									"<button type=\"button\" class=\"btn btn-sm btn-light-primary mt-3\" data-act=\"pair-add\" id=\"atk-streets-pair-add\">Add another pair</button></div>" +
 								"<div class=\"col-12\"><div class=\"form-check form-switch form-check-custom form-check-solid\">" +
@@ -267,6 +287,12 @@
 	function answersCell( street ) {
 		if ( ! street.pairs.length ) {
 			return "<span class=\"text-gray-500\">None yet</span>";
+		}
+		if ( window.ATK_ROUTE_PAIRS ) {
+			// One answer per road at each end: the driver gets a field, and a point, for each.
+			var e = window.ATK_ROUTE_PAIRS.ends( street.pairs );
+			return "<div class=\"akn-streets-pair\"><span class=\"text-gray-500\">From</span> " + esc( e.from.join( ", " ) ) + "</div>" +
+				"<div class=\"akn-streets-pair\"><span class=\"text-gray-500\">To</span> " + esc( e.to.join( ", " ) ) + "</div>";
 		}
 		var shown = street.pairs.slice( 0, 2 ).map( function ( p ) {
 			return "<div class=\"akn-streets-pair\">" + esc( p[ 0 ] ) + " <span class=\"text-gray-500\">to</span> " + esc( p[ 1 ] ) + "</div>";
