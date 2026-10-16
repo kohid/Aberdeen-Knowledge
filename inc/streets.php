@@ -250,7 +250,7 @@ class ATK_Street_Store {
 		}
 		$ward_ids = array();
 		foreach ( ATK_Nb_Store::neighbourhoods() as $id => $item ) {
-			$ward_ids[ ATK_Poi_Parser::ward_key( $item['name'] ) ] = (int) $id;
+			$ward_ids[ ATK_Route_Planner::ward_match_key( $item['name'] ) ] = (int) $id;
 		}
 
 		$summary = array( 'rows' => count( $parsed ), 'new' => 0, 'changed' => 0, 'same' => 0, 'pairs_added' => 0, 'flagged' => 0, 'cleared' => 0, 'wards_added' => 0, 'unknown_wards' => array() );
@@ -286,7 +286,7 @@ class ATK_Street_Store {
 			$wards   = array();
 			$issues  = $item['issues'];
 			foreach ( $item['wards'] as $ward ) {
-				$ward_key = ATK_Poi_Parser::ward_key( $ward );
+				$ward_key = ATK_Route_Planner::ward_match_key( $ward );
 				if ( isset( $ward_ids[ $ward_key ] ) ) {
 					$wards[] = $ward_ids[ $ward_key ];
 				} else {
