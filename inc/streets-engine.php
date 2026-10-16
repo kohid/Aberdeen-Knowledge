@@ -37,7 +37,8 @@ class ATK_Route_Pairs {
 				$words[ $i ] = $fold[ $word ];
 			}
 		}
-		return implode( ' ', $words );
+		// A dead end is an answer, in any spelling.
+		return preg_replace( '/\b(?:CUL DE SAC|CULDESAC|DEAD END|DEADEND)\b/u', 'DEAD END', implode( ' ', $words ) );
 	}
 
 	/**
@@ -99,6 +100,94 @@ class ATK_Route_Pairs {
 			}
 		}
 		return false;
+	}
+
+	/**
+	 * The distinct From answers and To answers of a street, each once (by key), in order.
+	 * The student gets one field per answer, and each correct answer is a point.
+	 *
+	 * @return array{from: string[], to: string[]}
+	 */
+	public static function ends( $pairs ) {
+		$out  = array( 'from' => array(), 'to' => array() );
+		$seen = array( 'from' => array(), 'to' => array() );
+		foreach ( is_array( $pairs ) ? $pairs : array() as $pair ) {
+			if ( ! is_array( $pair ) || count( $pair ) < 2 ) {
+				continue;
+			}
+			$pair = array_values( $pair );
+			foreach ( array( 'from' => $pair[0], 'to' => $pair[1] ) as $end => $text ) {
+				$key = self::key( $text );
+				if ( '' !== $key && ! isset( $seen[ $end ][ $key ] ) ) {
+					$seen[ $end ][ $key ] = true;
+					$out[ $end ][]        = (string) $text;
+				}
+			}
+		}
+		return $out;
+	}
+
+	/** The points a street is worth: one for every distinct answer at either end. */
+	public static function points( $pairs ) {
+		$ends = self::ends( $pairs );
+		return count( $ends['from'] ) + count( $ends['to'] );
+	}
+
+	/**
+	 * The fewest pairs that hold every From and every To answer: the longer list sets the
+	 * length and the shorter one repeats. Used for researched answers, so a street with
+	 * six roads at one end is six pairs, not thirty-six.
+	 */
+	public static function cover( array $from, array $to ) {
+		$from = array_values( $from );
+		$to   = array_values( $to );
+		if ( ! $from || ! $to ) {
+			return array();
+		}
+		$pairs = array();
+		$count = min( self::MAX_PAIRS, max( count( $from ), count( $to ) ) );
+		for ( $i = 0; $i < $count; $i++ ) {
+			$pairs[] = array( $from[ $i % count( $from ) ], $to[ $i % count( $to ) ] );
+		}
+		return $pairs;
+	}
+
+	/** How many distinct answers the typed entries hit (blank entries never count). */
+	private static function hits( array $entries, array $answers ) {
+		$typed = array();
+		foreach ( $entries as $entry ) {
+			$key = self::key( $entry );
+			if ( '' !== $key ) {
+				$typed[ $key ] = true;
+			}
+		}
+		$found = array();
+		foreach ( $answers as $answer ) {
+			$key = self::key( $answer );
+			if ( '' !== $key && isset( $typed[ $key ] ) ) {
+				$found[ $key ] = true;
+			}
+		}
+		return count( $found );
+	}
+
+	/**
+	 * Marks a reply by points: one for each distinct answer matched, From and To either
+	 * way round (the better of the two), blanks allowed, the same place twice counted once.
+	 *
+	 * @return array{points: int, max: int}
+	 */
+	public static function grade( $pairs, array $given_from, array $given_to ) {
+		$ends     = self::ends( $pairs );
+		$straight = self::hits( $given_from, $ends['from'] ) + self::hits( $given_to, $ends['to'] );
+		$swapped  = self::hits( $given_from, $ends['to'] ) + self::hits( $given_to, $ends['from'] );
+		return array( 'points' => max( $straight, $swapped ), 'max' => count( $ends['from'] ) + count( $ends['to'] ) );
+	}
+
+	/** Every answer for the review: "From: A / B — To: C". */
+	public static function answer_sheet( $pairs ) {
+		$ends = self::ends( $pairs );
+		return 'From: ' . implode( ' / ', $ends['from'] ) . ' — To: ' . implode( ' / ', $ends['to'] );
 	}
 
 	/** Every pair, for the Course Builder and the review: "A to B / C to D". */

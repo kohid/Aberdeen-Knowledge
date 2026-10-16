@@ -28,6 +28,16 @@ php.matches.forEach( function ( row ) {
 	check( "reply " + JSON.stringify( row[ 0 ] ) + " to " + JSON.stringify( row[ 1 ] ), pairs.matches( row[ 0 ], row[ 1 ], row[ 2 ] ), row[ 3 ] );
 } );
 
+php.ends.forEach( function ( row, i ) {
+	check( "ends of set " + i, pairs.ends( row[ 0 ] ), row[ 1 ] );
+} );
+php.grades.forEach( function ( row, i ) {
+	check( "grade " + i, pairs.grade( row[ 0 ], row[ 1 ], row[ 2 ] ), row[ 3 ] );
+} );
+php.sheets.forEach( function ( row, i ) {
+	check( "answer sheet " + i, pairs.answerSheet( row[ 0 ] ), row[ 1 ] );
+} );
+
 check( "the label lists every pair", pairs.label( [ [ "A Road", "B Street" ], [ "C", "D" ] ] ), "A Road to B Street / C to D" );
 check( "malformed pairs are skipped", pairs.matches( "A", "B", [ null, [ "A" ], "x", [ "A", "B" ] ] ), true );
 

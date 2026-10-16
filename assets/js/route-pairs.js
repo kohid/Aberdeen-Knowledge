@@ -31,7 +31,7 @@
 		}
 		return name.split( " " ).map( function ( word ) {
 			return Object.prototype.hasOwnProperty.call( FOLD, word ) ? FOLD[ word ] : word;
-		} ).join( " " );
+		} ).join( " " ).replace( /\b(?:CUL DE SAC|CULDESAC|DEAD END|DEADEND)\b/g, "DEAD END" ); // a dead end is an answer, in any spelling
 	}
 
 	/** True when from/to is any listed pair (array of [from, to]) in either order. */
@@ -51,10 +51,67 @@
 		} );
 	}
 
+	/** The distinct From and To answers of a street, each once (by key), in order. One field and one point each. */
+	function ends( pairs ) {
+		var out = { from: [], to: [] };
+		var seen = { from: {}, to: {} };
+		( pairs || [] ).forEach( function ( pair ) {
+			if ( ! Array.isArray( pair ) || pair.length < 2 ) {
+				return;
+			}
+			[ [ "from", pair[ 0 ] ], [ "to", pair[ 1 ] ] ].forEach( function ( side ) {
+				var k = key( side[ 1 ] );
+				if ( k !== "" && ! seen[ side[ 0 ] ][ k ] ) {
+					seen[ side[ 0 ] ][ k ] = true;
+					out[ side[ 0 ] ].push( String( side[ 1 ] ) );
+				}
+			} );
+		} );
+		return out;
+	}
+
+	/** How many distinct answers the typed entries hit (blank entries never count). */
+	function hits( entries, answers ) {
+		var typed = {};
+		( entries || [] ).forEach( function ( entry ) {
+			var k = key( entry );
+			if ( k !== "" ) {
+				typed[ k ] = true;
+			}
+		} );
+		var found = {};
+		var n = 0;
+		( answers || [] ).forEach( function ( answer ) {
+			var k = key( answer );
+			if ( k !== "" && typed[ k ] && ! found[ k ] ) {
+				found[ k ] = true;
+				n++;
+			}
+		} );
+		return n;
+	}
+
+	/**
+	 * Marks a reply by points: one per distinct answer matched, From and To either way round
+	 * (the better of the two), blanks allowed, the same place twice counted once.
+	 */
+	function grade( pairs, givenFrom, givenTo ) {
+		var e = ends( pairs );
+		var straight = hits( givenFrom, e.from ) + hits( givenTo, e.to );
+		var swapped = hits( givenFrom, e.to ) + hits( givenTo, e.from );
+		return { points: Math.max( straight, swapped ), max: e.from.length + e.to.length };
+	}
+
+	/** Every answer for the review: "From: A / B — To: C". */
+	function answerSheet( pairs ) {
+		var e = ends( pairs );
+		return "From: " + e.from.join( " / " ) + " \u2014 To: " + e.to.join( " / " );
+	}
+
 	/** "A to B / C to D", for the review. */
 	function label( pairs ) {
 		return ( pairs || [] ).map( function ( pair ) { return pair[ 0 ] + " to " + pair[ 1 ]; } ).join( " / " );
 	}
 
-	return { key: key, matches: matches, label: label };
+	return { key: key, matches: matches, label: label, ends: ends, grade: grade, answerSheet: answerSheet };
 } ) );

@@ -147,5 +147,28 @@ check( 'week 2 splits its 3 streets over the 5 tests', array_map( 'count', $plan
 check( 'week 2 test 1 starts with the first street A to Z', $plan['weeks'][1]['tests'][0][0]['street'], 'alpha Road' );
 check( 'week minutes', $plan['weeks'][1]['minutes'], 20 );
 
+/* ---- Per-answer points: ends, cover pairs, grading ---------------------- */
+
+check( 'ends splits the pairs into the From and To answers', ATK_Route_Pairs::ends( array( array( 'A', 'C' ), array( 'B', 'D' ) ) ), array( 'from' => array( 'A', 'B' ), 'to' => array( 'C', 'D' ) ) );
+check( 'ends keeps each answer once, the first spelling', ATK_Route_Pairs::ends( array( array( 'Union St', 'Castle Street' ), array( 'Union Street', 'Castle St' ) ) ), array( 'from' => array( 'Union St' ), 'to' => array( 'Castle Street' ) ) );
+check( 'ends of nothing', ATK_Route_Pairs::ends( array() ), array( 'from' => array(), 'to' => array() ) );
+check( 'points are the answers across both ends', ATK_Route_Pairs::points( array( array( 'A', 'D' ), array( 'B', 'D' ), array( 'C', 'D' ) ) ), 4 );
+check( 'cover pairs: several From, one To', ATK_Route_Pairs::cover( array( 'A', 'B', 'C' ), array( 'D' ) ), array( array( 'A', 'D' ), array( 'B', 'D' ), array( 'C', 'D' ) ) );
+check( 'cover pairs: one From, several To', ATK_Route_Pairs::cover( array( 'A' ), array( 'D', 'E' ) ), array( array( 'A', 'D' ), array( 'A', 'E' ) ) );
+check( 'cover pairs: two and two', ATK_Route_Pairs::cover( array( 'A', 'B' ), array( 'C', 'D' ) ), array( array( 'A', 'C' ), array( 'B', 'D' ) ) );
+check( 'cover pairs keep every answer', ATK_Route_Pairs::ends( ATK_Route_Pairs::cover( array( 'A', 'B', 'C' ), array( 'X', 'Y' ) ) ), array( 'from' => array( 'A', 'B', 'C' ), 'to' => array( 'X', 'Y' ) ) );
+check( 'cover pairs need both ends', ATK_Route_Pairs::cover( array( 'A' ), array() ), array() );
+check( 'cover pairs stop at the limit', count( ATK_Route_Pairs::cover( array_map( function ( $i ) { return "From $i"; }, range( 1, 25 ) ), array( 'To' ) ) ), ATK_Route_Pairs::MAX_PAIRS );
+
+$union = array( array( 'Alford Place', 'Castle Street' ), array( 'Holburn Street', 'Castle Street' ) );
+check( 'grade: full marks', ATK_Route_Pairs::grade( $union, array( 'Alford Place', 'Holburn St' ), array( 'Castle St' ) ), array( 'points' => 3, 'max' => 3 ) );
+check( 'grade: one From of two', ATK_Route_Pairs::grade( $union, array( 'Holburn Street', '' ), array( 'Castle Street' ) ), array( 'points' => 2, 'max' => 3 ) );
+check( 'grade: From and To the wrong way round', ATK_Route_Pairs::grade( $union, array( 'Castle Street' ), array( 'Alford Place', 'Holburn Street' ) ), array( 'points' => 3, 'max' => 3 ) );
+check( 'grade: the same place twice scores once', ATK_Route_Pairs::grade( $union, array( 'Alford Place', 'alford place' ), array( 'Castle Street' ) ), array( 'points' => 2, 'max' => 3 ) );
+check( 'grade: blanks score nothing', ATK_Route_Pairs::grade( $union, array( '' ), array( '  ' ) ), array( 'points' => 0, 'max' => 3 ) );
+check( 'grade: a dead end is an answer in any spelling', ATK_Route_Pairs::grade( array( array( 'Hall Road', 'Dead end' ) ), array( 'hall rd' ), array( 'Cul-de-sac' ) ), array( 'points' => 2, 'max' => 2 ) );
+check( 'the answer sheet lists every answer', ATK_Route_Pairs::answer_sheet( $union ), "From: Alford Place / Holburn Street \u{2014} To: Castle Street" );
+check( 'dead end spellings share one key', array( ATK_Route_Pairs::key( 'Cul-de-sac' ), ATK_Route_Pairs::key( 'dead end' ), ATK_Route_Pairs::key( 'DEADEND' ) ), array( 'DEAD END', 'DEAD END', 'DEAD END' ) );
+
 echo "\n$checks checks, $failures failed\n";
 exit( $failures ? 1 : 0 );
